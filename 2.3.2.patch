@@ -1,120 +1,130 @@
-diff --git a/lib/rack_zeitwerk_option_1.rb b/lib/rack_zeitwerk_option_1.rb
+diff --git a/lib/rack.rb b/lib/rack.rb
+index 5cc52ba4..8d39e3b7 100644
+--- a/lib/rack.rb
++++ b/lib/rack.rb
+@@ -5,60 +5,6 @@
+ # Rack is freely distributable under the terms of an MIT-style license.
+ # See MIT-LICENSE or https://opensource.org/licenses/MIT.
+ 
+-# The Rack main module, serving as a namespace for all core Rack
+-# modules and classes.
+-#
+-# All modules meant for use in your application are <tt>autoload</tt>ed here,
+-# so it should be enough just to <tt>require 'rack'</tt> in your code.
+-
+ require_relative 'rack/version'
+ require_relative 'rack/constants'
+-
+-module Rack
+-  autoload :BadRequest, "rack/bad_request"
+-  autoload :BodyProxy, "rack/body_proxy"
+-  autoload :Builder, "rack/builder"
+-  autoload :Cascade, "rack/cascade"
+-  autoload :CommonLogger, "rack/common_logger"
+-  autoload :ConditionalGet, "rack/conditional_get"
+-  autoload :Config, "rack/config"
+-  autoload :ContentLength, "rack/content_length"
+-  autoload :ContentType, "rack/content_type"
+-  autoload :Deflater, "rack/deflater"
+-  autoload :Directory, "rack/directory"
+-  autoload :ETag, "rack/etag"
+-  autoload :Events, "rack/events"
+-  autoload :Files, "rack/files"
+-  autoload :ForwardRequest, "rack/recursive"
+-  autoload :Head, "rack/head"
+-  autoload :Headers, "rack/headers"
+-  autoload :Lint, "rack/lint"
+-  autoload :Lock, "rack/lock"
+-  autoload :MediaType, "rack/media_type"
+-  autoload :MethodOverride, "rack/method_override"
+-  autoload :Mime, "rack/mime"
+-  autoload :MockRequest, "rack/mock_request"
+-  autoload :MockResponse, "rack/mock_response"
+-  autoload :Multipart, "rack/multipart"
+-  autoload :NullLogger, "rack/null_logger"
+-  autoload :QueryParser, "rack/query_parser"
+-  autoload :Recursive, "rack/recursive"
+-  autoload :Reloader, "rack/reloader"
+-  autoload :Request, "rack/request"
+-  autoload :Response, "rack/response"
+-  autoload :RewindableInput, "rack/rewindable_input"
+-  autoload :Runtime, "rack/runtime"
+-  autoload :Sendfile, "rack/sendfile"
+-  autoload :ShowExceptions, "rack/show_exceptions"
+-  autoload :ShowStatus, "rack/show_status"
+-  autoload :Static, "rack/static"
+-  autoload :TempfileReaper, "rack/tempfile_reaper"
+-  autoload :URLMap, "rack/urlmap"
+-  autoload :Utils, "rack/utils"
+-
+-  module Auth
+-    autoload :Basic, "rack/auth/basic"
+-    autoload :AbstractHandler, "rack/auth/abstract/handler"
+-    autoload :AbstractRequest, "rack/auth/abstract/request"
+-  end
+-end
++require_relative 'rack/autoloads'
+diff --git a/lib/rack/autoloads.rb b/lib/rack/autoloads.rb
 new file mode 100644
-index 00000000..f5aefd3c
+index 00000000..b6d96d58
 --- /dev/null
-+++ b/lib/rack_zeitwerk_option_1.rb
-@@ -0,0 +1,114 @@
++++ b/lib/rack/autoloads.rb
+@@ -0,0 +1,58 @@
 +# frozen_string_literal: true
 +
-+require_relative 'rack/version'
-+require_relative 'rack/constants'
-+
 +module Rack
-+  AUTOLOADS = {
-+    BadRequest: 'rack/bad_request',
-+    BodyProxy: 'rack/body_proxy',
-+    Builder: 'rack/builder',
-+    Cascade: 'rack/cascade',
-+    CommonLogger: 'rack/common_logger',
-+    ConditionalGet: 'rack/conditional_get',
-+    Config: 'rack/config',
-+    ContentLength: 'rack/content_length',
-+    ContentType: 'rack/content_type',
-+    Deflater: 'rack/deflater',
-+    Directory: 'rack/directory',
-+    ETag: 'rack/etag',
-+    Events: 'rack/events',
-+    Files: 'rack/files',
-+    ForwardRequest: 'rack/recursive',
-+    Head: 'rack/head',
-+    Headers: 'rack/headers',
-+    Lint: 'rack/lint',
-+    Lock: 'rack/lock',
-+    MediaType: 'rack/media_type',
-+    MethodOverride: 'rack/method_override',
-+    Mime: 'rack/mime',
-+    MockRequest: 'rack/mock_request',
-+    MockResponse: 'rack/mock_response',
-+    Multipart: 'rack/multipart',
-+    NullLogger: 'rack/null_logger',
-+    QueryParser: 'rack/query_parser',
-+    Recursive: 'rack/recursive',
-+    Reloader: 'rack/reloader',
-+    Request: 'rack/request',
-+    Response: 'rack/response',
-+    RewindableInput: 'rack/rewindable_input',
-+    Runtime: 'rack/runtime',
-+    Sendfile: 'rack/sendfile',
-+    ShowExceptions: 'rack/show_exceptions',
-+    ShowStatus: 'rack/show_status',
-+    Static: 'rack/static',
-+    TempfileReaper: 'rack/tempfile_reaper',
-+    URLMap: 'rack/urlmap',
-+    Utils: 'rack/utils'
-+  }.freeze
-+
-+  ZEITWERK_INFLECTIONS = {
-+    'etag' => 'ETag',
-+    'urlmap' => 'URLMap'
-+  }.freeze
-+
-+  ZEITWERK_IGNORES = [
-+    File.join(__dir__, 'rack/constants.rb'),
-+    File.join(__dir__, 'rack/version.rb')
-+  ].freeze
-+
-+  ZEITWERK_COLLAPSE_DIRS = [
-+    File.join(__dir__, 'rack/auth/abstract')
-+  ].freeze
-+
-+  def self.setup_autoloads
-+    register_autoloads(self, AUTOLOADS)
-+    Auth.setup_autoloads
-+    self
++  {
++    BadRequest: "rack/bad_request",
++    BodyProxy: "rack/body_proxy",
++    Builder: "rack/builder",
++    Cascade: "rack/cascade",
++    CommonLogger: "rack/common_logger",
++    ConditionalGet: "rack/conditional_get",
++    Config: "rack/config",
++    ContentLength: "rack/content_length",
++    ContentType: "rack/content_type",
++    Deflater: "rack/deflater",
++    Directory: "rack/directory",
++    ETag: "rack/etag",
++    Events: "rack/events",
++    Files: "rack/files",
++    ForwardRequest: "rack/recursive",
++    Head: "rack/head",
++    Headers: "rack/headers",
++    Lint: "rack/lint",
++    Lock: "rack/lock",
++    MediaType: "rack/media_type",
++    MethodOverride: "rack/method_override",
++    Mime: "rack/mime",
++    MockRequest: "rack/mock_request",
++    MockResponse: "rack/mock_response",
++    Multipart: "rack/multipart",
++    NullLogger: "rack/null_logger",
++    QueryParser: "rack/query_parser",
++    Recursive: "rack/recursive",
++    Reloader: "rack/reloader",
++    Request: "rack/request",
++    Response: "rack/response",
++    RewindableInput: "rack/rewindable_input",
++    Runtime: "rack/runtime",
++    Sendfile: "rack/sendfile",
++    ShowExceptions: "rack/show_exceptions",
++    ShowStatus: "rack/show_status",
++    Static: "rack/static",
++    TempfileReaper: "rack/tempfile_reaper",
++    URLMap: "rack/urlmap",
++    Utils: "rack/utils"
++  }.each do |name, path|
++    autoload name, path
 +  end
-+
-+  def self.setup_zeitwerk(loader)
-+    loader.push_dir(File.join(__dir__, 'rack'), namespace: self)
-+    loader.inflector.inflect(ZEITWERK_INFLECTIONS) if loader.respond_to?(:inflector)
-+
-+    if loader.respond_to?(:ignore)
-+      ZEITWERK_IGNORES.each do |path|
-+        loader.ignore(path)
-+      end
-+    end
-+
-+    if loader.respond_to?(:collapse)
-+      ZEITWERK_COLLAPSE_DIRS.each do |path|
-+        loader.collapse(path)
-+      end
-+    end
-+
-+    register_autoloads(self, ForwardRequest: AUTOLOADS.fetch(:ForwardRequest))
-+    self
-+  end
-+
-+  def self.register_autoloads(namespace, mapping)
-+    mapping.each do |constant_name, require_path|
-+      next if namespace.const_defined?(constant_name, false)
-+      next if namespace.autoload?(constant_name)
-+
-+      namespace.autoload(constant_name, require_path)
-+    end
-+  end
-+  private_class_method :register_autoloads
 +
 +  module Auth
-+    AUTOLOADS = {
-+      Basic: 'rack/auth/basic',
-+      AbstractHandler: 'rack/auth/abstract/handler',
-+      AbstractRequest: 'rack/auth/abstract/request'
-+    }.freeze
-+
-+    def self.setup_autoloads
-+      Rack.__send__(:register_autoloads, self, AUTOLOADS)
-+      self
++    {
++      Basic: "rack/auth/basic",
++      AbstractHandler: "rack/auth/abstract/handler",
++      AbstractRequest: "rack/auth/abstract/request"
++    }.each do |name, path|
++      autoload name, path
 +    end
 +  end
-+
-+  setup_autoloads unless ENV['RACK_AUTOLOADER'] == 'zeitwerk'
 +end
