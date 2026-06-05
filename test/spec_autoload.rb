@@ -1,0 +1,75 @@
+# frozen_string_literal: true
+
+require_relative 'helper'
+
+separate_testing do
+  $:.unshift(File.expand_path('../lib', __dir__))
+  require_relative '../lib/rack'
+end
+
+describe Rack do
+  describe 'autoloaded constants' do
+    it 'loads all top-level autoloaded constants without LoadError' do
+      top_level_constants = [
+        :BadRequest,
+        :BodyProxy,
+        :Builder,
+        :Cascade,
+        :CommonLogger,
+        :ConditionalGet,
+        :Config,
+        :ContentLength,
+        :ContentType,
+        :Deflater,
+        :Directory,
+        :ETag,
+        :Events,
+        :Files,
+        :ForwardRequest,
+        :Head,
+        :Headers,
+        :Lint,
+        :Lock,
+        :MediaType,
+        :MethodOverride,
+        :Mime,
+        :MockRequest,
+        :MockResponse,
+        :Multipart,
+        :NullLogger,
+        :QueryParser,
+        :Recursive,
+        :Reloader,
+        :Request,
+        :Response,
+        :RewindableInput,
+        :Runtime,
+        :Sendfile,
+        :ShowExceptions,
+        :ShowStatus,
+        :Static,
+        :TempfileReaper,
+        :URLMap,
+        :Utils
+      ]
+
+      top_level_constants.each do |const_name|
+        proc { Rack.const_get(const_name) }.must_be_silent
+        Rack.const_get(const_name).must_be_kind_of(Module)
+      end
+    end
+
+    it 'loads all Auth submodule autoloaded constants without LoadError' do
+      auth_constants = [
+        :Basic,
+        :AbstractHandler,
+        :AbstractRequest
+      ]
+
+      auth_constants.each do |const_name|
+        proc { Rack::Auth.const_get(const_name) }.must_be_silent
+        Rack::Auth.const_get(const_name).must_be_kind_of(Module)
+      end
+    end
+  end
+end
