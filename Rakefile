@@ -3,6 +3,8 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
+import File.expand_path('tasks/check_autoloads.rake', __dir__)
+
 desc "Run all the tests"
 task default: :test
 

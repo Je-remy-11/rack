@@ -1,0 +1,47 @@
+diff --git a/Rakefile b/Rakefile
+index d0bf1bad..7bf1c052 100644
+--- a/Rakefile
++++ b/Rakefile
+@@ -3,6 +3,8 @@
+ require "bundler/gem_tasks"
+ require "rake/testtask"
+ 
++import File.expand_path('tasks/check_autoloads.rake', __dir__)
++
+ desc "Run all the tests"
+ task default: :test
+ 
+diff --git a/tasks/check_autoloads.rake b/tasks/check_autoloads.rake
+new file mode 100644
+index 00000000..8ae64f5c
+--- /dev/null
++++ b/tasks/check_autoloads.rake
+@@ -0,0 +1,27 @@
++# frozen_string_literal: true
++
++desc "Check that all autoloaded files in rack.rb exist"
++task :check_autoloads do
++  rack_rb_path = File.expand_path('../../lib/rack.rb', __FILE__)
++  rack_rb_content = File.read(rack_rb_path)
++
++  autoload_paths = rack_rb_content.scan(/autoload\s+:\w+,\s*"([^"]+)"/).flatten
++
++  lib_dir = File.expand_path('../../lib', __FILE__)
++  missing_files = []
++
++  autoload_paths.each do |relative_path|
++    full_path = File.join(lib_dir, "#{relative_path}.rb")
++    unless File.exist?(full_path)
++      missing_files << full_path
++    end
++  end
++
++  if missing_files.empty?
++    puts "All autoloaded files exist. (#{autoload_paths.size} files checked)"
++  else
++    puts "Missing autoloaded files (#{missing_files.size}):"
++    missing_files.each { |f| puts "  - #{f}" }
++    abort
++  end
++end
+\ No newline at end of file
