@@ -1,0 +1,181 @@
+diff --git a/2.5.5.patch b/2.5.5.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/test/spec_autoload.rb b/test/spec_autoload.rb
+new file mode 100644
+index 00000000..045107b8
+--- /dev/null
++++ b/test/spec_autoload.rb
+@@ -0,0 +1,172 @@
++# frozen_string_literal: true
++
++require_relative 'helper'
++
++separate_testing do
++  require_relative '../lib/rack'
++end
++
++describe "Rack autoload" do
++  RACK_AUTOLOADS = {
++    BadRequest:        "rack/bad_request",
++    BodyProxy:         "rack/body_proxy",
++    Builder:           "rack/builder",
++    Cascade:           "rack/cascade",
++    CommonLogger:      "rack/common_logger",
++    ConditionalGet:    "rack/conditional_get",
++    Config:            "rack/config",
++    ContentLength:     "rack/content_length",
++    ContentType:       "rack/content_type",
++    Deflater:          "rack/deflater",
++    Directory:         "rack/directory",
++    ETag:              "rack/etag",
++    Events:            "rack/events",
++    Files:             "rack/files",
++    ForwardRequest:    "rack/recursive",
++    Head:              "rack/head",
++    Headers:           "rack/headers",
++    Lint:              "rack/lint",
++    Lock:              "rack/lock",
++    MediaType:         "rack/media_type",
++    MethodOverride:    "rack/method_override",
++    Mime:              "rack/mime",
++    MockRequest:       "rack/mock_request",
++    MockResponse:      "rack/mock_response",
++    Multipart:         "rack/multipart",
++    NullLogger:        "rack/null_logger",
++    QueryParser:       "rack/query_parser",
++    Recursive:         "rack/recursive",
++    Reloader:          "rack/reloader",
++    Request:           "rack/request",
++    Response:          "rack/response",
++    RewindableInput:   "rack/rewindable_input",
++    Runtime:           "rack/runtime",
++    Sendfile:          "rack/sendfile",
++    ShowExceptions:    "rack/show_exceptions",
++    ShowStatus:        "rack/show_status",
++    Static:            "rack/static",
++    TempfileReaper:    "rack/tempfile_reaper",
++    URLMap:            "rack/urlmap",
++    Utils:             "rack/utils",
++  }.freeze
++
++  RACK_AUTH_AUTOLOADS = {
++    Basic:           "rack/auth/basic",
++    AbstractHandler: "rack/auth/abstract/handler",
++    AbstractRequest: "rack/auth/abstract/request",
++  }.freeze
++
++  describe "Rack top-level autoload constants load successfully" do
++    RACK_AUTOLOADS.each do |const_name, _path|
++      it "Rack::#{const_name} can be loaded without LoadError or NameError" do
++        value = nil
++        error = nil
++        begin
++          value = Rack.const_get(const_name)
++        rescue LoadError, NameError => e
++          error = e
++        end
++        error.must_be_nil, "Failed to load Rack::#{const_name}: #{error.class}: #{error.message}"
++        value.must_be_kind_of(Module)
++      end
++    end
++  end
++
++  describe "Rack::Auth autoload constants load successfully" do
++    RACK_AUTH_AUTOLOADS.each do |const_name, _path|
++      it "Rack::Auth::#{const_name} can be loaded without LoadError or NameError" do
++        value = nil
++        error = nil
++        begin
++          value = Rack::Auth.const_get(const_name)
++        rescue LoadError, NameError => e
++          error = e
++        end
++        error.must_be_nil, "Failed to load Rack::Auth::#{const_name}: #{error.class}: #{error.message}"
++        value.must_be_kind_of(Module)
++      end
++    end
++  end
++
++  describe "autoload target files exist" do
++    RACK_AUTOLOADS.each do |const_name, path|
++      it "file for Rack::#{const_name} exists at #{path}.rb" do
++        base = File.expand_path('../../lib', __dir__)
++        file = File.join(base, "#{path}.rb")
++        File.exist?(file).must_equal true, "Expected autoload file #{file} for Rack::#{const_name} to exist"
++      end
++    end
++
++    RACK_AUTH_AUTOLOADS.each do |const_name, path|
++      it "file for Rack::Auth::#{const_name} exists at #{path}.rb" do
++        base = File.expand_path('../../lib', __dir__)
++        file = File.join(base, "#{path}.rb")
++        File.exist?(file).must_equal true, "Expected autoload file #{file} for Rack::Auth::#{const_name} to exist"
++      end
++    end
++  end
++
++  describe "autoload constants resolve to expected types" do
++    it "Rack::Builder is a Class" do
++      Rack::Builder.must_be_kind_of(Class)
++    end
++
++    it "Rack::Request is a Class" do
++      Rack::Request.must_be_kind_of(Class)
++    end
++
++    it "Rack::Response is a Class" do
++      Rack::Response.must_be_kind_of(Class)
++    end
++
++    it "Rack::Utils is a Module" do
++      Rack::Utils.must_be_kind_of(Module)
++      (Rack::Utils.is_a?(Class)).must_equal false
++    end
++
++    it "Rack::Mime is a Module" do
++      Rack::Mime.must_be_kind_of(Module)
++      (Rack::Mime.is_a?(Class)).must_equal false
++    end
++
++    it "Rack::Multipart is a Module" do
++      Rack::Multipart.must_be_kind_of(Module)
++      (Rack::Multipart.is_a?(Class)).must_equal false
++    end
++
++    it "Rack::MediaType is a Module" do
++      Rack::MediaType.must_be_kind_of(Module)
++      (Rack::MediaType.is_a?(Class)).must_equal false
++    end
++
++    it "Rack::Auth is a Module" do
++      Rack::Auth.must_be_kind_of(Module)
++      (Rack::Auth.is_a?(Class)).must_equal false
++    end
++
++    it "Rack::Auth::Basic is a Class" do
++      Rack::Auth::Basic.must_be_kind_of(Class)
++    end
++  end
++
++  describe "shared autoload file defines both constants" do
++    it "rack/recursive defines both Rack::Recursive and Rack::ForwardRequest" do
++      Rack::Recursive.must_be_kind_of(Class)
++      Rack::ForwardRequest.must_be_kind_of(Class)
++    end
++  end
++
++  describe "autoload constants are defined after loading" do
++    RACK_AUTOLOADS.each do |const_name, _path|
++      it "Rack::#{const_name} is defined after autoload resolves" do
++        Rack.const_defined?(const_name).must_equal true
++      end
++    end
++
++    RACK_AUTH_AUTOLOADS.each do |const_name, _path|
++      it "Rack::Auth::#{const_name} is defined after autoload resolves" do
++        Rack::Auth.const_defined?(const_name).must_equal true
++      end
++    end
++  end
++end
