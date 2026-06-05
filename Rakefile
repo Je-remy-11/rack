@@ -3,8 +3,6 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
-desc "Run all the tests"
-task default: :test
 
 desc "Install gem dependencies"
 task :deps do
@@ -135,8 +133,58 @@ task doc: :rdoc
 desc "Generate RDoc documentation"
 task rdoc: %w[changelog spec] do
   sh(*%w{rdoc --line-numbers --main README.rdoc
-              --title 'Rack\ Documentation' --charset utf-8 -U -o doc} +
+              --title 'Rack\ Documentation' --charset utf-8 -o doc} +
               %w{README.rdoc KNOWN-ISSUES SPEC.rdoc ChangeLog} +
               `git ls-files lib/\*\*/\*.rb`.strip.split)
   cp "contrib/rdoc.css", "doc/rdoc.css"
+end
+
+desc "Check if all autoload files exist"
+task :check_autoload do
+  rack_lib = File.expand_path("lib/rack.rb", __dir__)
+  rack_dir = File.expand_path("lib", __dir__)
+
+  autoload_files = []
+  current_module = nil
+
+  File.foreach(rack_lib) do |line|
+    if line =~ /^\s*module\s+(\w+)/
+      current_module = $1
+    elsif line =~ /^\s*end\s*$/
+      current_module = nil
+    elsif line =~ /autoload\s+:(\w+),\s*"([^"]+)"/
+      file_path = $2
+      autoload_files << file_path
+    end
+  end
+
+  missing = []
+  existing = []
+
+  autoload_files.each do |file_path|
+    full_path = File.join(rack_dir, "#{file_path}.rb")
+    if File.exist?(full_path)
+      existing << file_path
+    else
+      missing << file_path
+    end
+  end
+
+  puts "Checking #{autoload_files.size} autoload files..."
+  puts
+
+  if existing.any?
+    puts "#{existing.size} files found:"
+    existing.each { |f| puts "  ✓ #{f}.rb" }
+    puts
+  end
+
+  if missing.any?
+    puts "❌ #{missing.size} files missing:"
+    missing.each { |f| puts "  ✗ #{f}.rb" }
+    puts
+    abort "Missing autoload files detected!"
+  else
+    puts "✓ All autoload files exist!"
+  end
 end
