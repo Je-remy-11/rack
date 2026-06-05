@@ -3,6 +3,37 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
+desc "Check all autoloaded files exist"
+task "check:autoload" do
+  require_relative "lib/rack"
+
+  base_dir = File.expand_path("..", __FILE__)
+  errors = []
+
+  check_autoloads = lambda do |mod|
+    mod.autoloads.each do |name, path|
+      full_path = File.join(base_dir, "lib", "#{path}.rb")
+      unless File.exist?(full_path)
+        errors << "#{mod.name}::#{name} (expected at #{full_path})"
+      end
+    end
+    mod.constants(false).each do |const|
+      value = mod.const_get(const, false)
+      check_autoloads.call(value) if value.is_a?(Module)
+    end
+  end
+
+  check_autoloads.call(Rack)
+
+  if errors.empty?
+    puts "All autoloaded files exist"
+  else
+    puts "Missing autoloaded files:"
+    errors.each { |e| puts "  - #{e}" }
+    exit 1
+  end
+end
+
 desc "Run all the tests"
 task default: :test
 
@@ -126,7 +157,7 @@ task test: %w[spec test:regular test:separate]
 desc "Run all the tests we run on CI"
 task ci: :test
 
-task gem: :spec do
+task gem: %w[check:autoload spec] do
   sh "gem build rack.gemspec"
 end
 
