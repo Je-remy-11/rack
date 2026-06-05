@@ -13,7 +13,6 @@ task :deps do
   spec.dependencies.each do |dep|
     reqs = dep.requirements_list
     reqs = (["-v"] * reqs.size).zip(reqs).flatten
-    # Use system over sh, because we want to ignore errors!
     system Gem.ruby, "-S", "gem", "install", '--conservative', dep.name, *reqs
   end
 end
@@ -41,6 +40,45 @@ end
 def release
   "rack-" + File.read('lib/rack/version.rb')[/RELEASE += +([\"\'])([\d][\w\.]+)\1/, 2]
 end
+
+def autoload_targets_for(mod, namespace = mod.name)
+  mod.constants(false).each_with_object([]) do |name, targets|
+    if (autoload_path = mod.autoload?(name))
+      targets << ["#{namespace}::#{name}", autoload_path]
+      next
+    end
+
+    constant = mod.const_get(name, false)
+    next unless constant.is_a?(Module)
+
+    targets.concat(autoload_targets_for(constant, "#{namespace}::#{name}"))
+  end
+end
+
+def verify_autoload_files!
+  require_relative "lib/rack"
+
+  missing_targets = autoload_targets_for(Rack).filter_map do |constant_name, autoload_path|
+    expected_file = File.expand_path("lib/#{autoload_path}.rb", __dir__)
+    [constant_name, autoload_path, expected_file] unless File.file?(expected_file)
+  end
+
+  return if missing_targets.empty?
+
+  message = missing_targets.map do |constant_name, autoload_path, expected_file|
+    "#{constant_name} autoloads #{autoload_path.inspect}, expected #{expected_file}"
+  end.join("\n")
+
+  raise "Autoload target check failed:\n#{message}"
+end
+
+desc "Verify that every Rack autoload target resolves to a file in lib/"
+task "autoload:check" do
+  verify_autoload_files!
+  puts "Verified #{autoload_targets_for(Rack).size} autoload target(s)"
+end
+
+Rake::Task["build"].enhance(["autoload:check"])
 
 desc "Make binaries executable"
 task :chmod do
