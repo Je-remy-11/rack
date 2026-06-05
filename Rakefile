@@ -140,3 +140,48 @@ task rdoc: %w[changelog spec] do
               `git ls-files lib/\*\*/\*.rb`.strip.split)
   cp "contrib/rdoc.css", "doc/rdoc.css"
 end
+
+desc "Check if all autoloaded files exist"
+task :check_autoload_files do
+  require 'pathname'
+  
+  lib_dir = Pathname.new(__dir__).join('lib')
+  rack_rb = lib_dir.join('rack.rb')
+  
+  autoloads = []
+  current_namespace = 'Rack'
+  
+  File.read(rack_rb).each_line do |line|
+    line = line.strip
+    
+    if line.match?(/^module\s+(\w+)/)
+      current_namespace = "Rack::#{$1}"
+    elsif line.match?(/^end$/)
+      current_namespace = 'Rack'
+    elsif line.match?(/^autoload\s+:(\w+),\s*["']([^"']+)["']/)
+      const_name = $1
+      path = $2
+      full_name = current_namespace == 'Rack' ? ":#{const_name}" : "#{current_namespace}::#{const_name}"
+      autoloads << [full_name, path]
+    end
+  end
+  
+  missing_files = []
+  
+  autoloads.each do |name, path|
+    file_path = lib_dir.join(path + '.rb')
+    unless file_path.exist?
+      missing_files << [name, path]
+    end
+  end
+  
+  if missing_files.empty?
+    puts "All autoloaded files exist."
+  else
+    puts "Missing autoloaded files:"
+    missing_files.each do |name, path|
+      puts "  #{name}: #{path}.rb"
+    end
+    exit 1
+  end
+end
