@@ -1,0 +1,175 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# debug_rack_autoload.rb
+# 用于调试 Rack autoload 加载失败的工具
+# 
+# 使用场景：当某个 autoload 文件缺失导致 LoadError 时，快速定位是哪个常量触发的
+# 
+# 使用方法:
+#   1. 直接运行测试: ruby debug_rack_autoload.rb
+#   2. 或在你的代码中引入: require_relative 'debug_rack_autoload'
+#      然后调用: RackAutoloadDebugger.test_all
+
+module RackAutoloadDebugger
+  # Rack 模块的 autoload 映射表（从 lib/rack.rb 提取）
+  RACK_AUTOLOADS = {
+    'Rack::BadRequest' => 'rack/bad_request',
+    'Rack::BodyProxy' => 'rack/body_proxy',
+    'Rack::Builder' => 'rack/builder',
+    'Rack::Cascade' => 'rack/cascade',
+    'Rack::CommonLogger' => 'rack/common_logger',
+    'Rack::ConditionalGet' => 'rack/conditional_get',
+    'Rack::Config' => 'rack/config',
+    'Rack::ContentLength' => 'rack/content_length',
+    'Rack::ContentType' => 'rack/content_type',
+    'Rack::Deflater' => 'rack/deflater',
+    'Rack::Directory' => 'rack/directory',
+    'Rack::ETag' => 'rack/etag',
+    'Rack::Events' => 'rack/events',
+    'Rack::Files' => 'rack/files',
+    'Rack::ForwardRequest' => 'rack/recursive',
+    'Rack::Head' => 'rack/head',
+    'Rack::Headers' => 'rack/headers',
+    'Rack::Lint' => 'rack/lint',
+    'Rack::Lock' => 'rack/lock',
+    'Rack::MediaType' => 'rack/media_type',
+    'Rack::MethodOverride' => 'rack/method_override',
+    'Rack::Mime' => 'rack/mime',
+    'Rack::MockRequest' => 'rack/mock_request',
+    'Rack::MockResponse' => 'rack/mock_response',
+    'Rack::Multipart' => 'rack/multipart',
+    'Rack::NullLogger' => 'rack/null_logger',
+    'Rack::QueryParser' => 'rack/query_parser',
+    'Rack::Recursive' => 'rack/recursive',
+    'Rack::Reloader' => 'rack/reloader',
+    'Rack::Request' => 'rack/request',
+    'Rack::Response' => 'rack/response',
+    'Rack::RewindableInput' => 'rack/rewindable_input',
+    'Rack::Runtime' => 'rack/runtime',
+    'Rack::Sendfile' => 'rack/sendfile',
+    'Rack::ShowExceptions' => 'rack/show_exceptions',
+    'Rack::ShowStatus' => 'rack/show_status',
+    'Rack::Static' => 'rack/static',
+    'Rack::TempfileReaper' => 'rack/tempfile_reaper',
+    'Rack::URLMap' => 'rack/urlmap',
+    'Rack::Utils' => 'rack/utils',
+    'Rack::Auth::Basic' => 'rack/auth/basic',
+    'Rack::Auth::AbstractHandler' => 'rack/auth/abstract/handler',
+    'Rack::Auth::AbstractRequest' => 'rack/auth/abstract/request'
+  }.freeze
+
+  class << self
+    # 测试单个 autoload 常量
+    def test_constant(const_name)
+      parts = const_name.split('::')
+      base = Object
+      
+      begin
+        parts.each { |part| base = base.const_get(part) }
+        { status: :success, constant: const_name, value: base }
+      rescue LoadError => e
+        { status: :load_error, constant: const_name, error: e, message: e.message, backtrace: e.backtrace }
+      rescue NameError => e
+        { status: :name_error, constant: const_name, error: e, message: e.message }
+      rescue => e
+        { status: :other_error, constant: const_name, error: e, message: e.message }
+      end
+    end
+
+    # 测试所有 Rack autoload 常量
+    def test_all(autoloads = RACK_AUTOLOADS)
+      results = {}
+      errors = []
+
+      puts "=" * 70
+      puts "Rack Autoload 常量测试"
+      puts "=" * 70
+      puts
+
+      autoloads.each do |const_name, path|
+        result = test_constant(const_name)
+        results[const_name] = result
+
+        case result[:status]
+        when :success
+          puts "✓ #{const_name.ljust(35)} -> #{path}"
+        when :load_error
+          puts "✗ LOAD ERROR: #{const_name.ljust(25)} -> #{path}"
+          puts "  错误: #{result[:message]}"
+          puts "  调用栈:"
+          result[:backtrace].first(3).each { |l| puts "    #{l}" }
+          errors << { const: const_name, path: path, error: result[:error] }
+        when :name_error
+          puts "? #{const_name.ljust(35)} -> #{path} (NameError: #{result[:message]})"
+        else
+          puts "! #{const_name.ljust(35)} -> #{path} (#{result[:status]})"
+        end
+      end
+
+      puts
+      puts "=" * 70
+      if errors.any?
+        puts "发现 #{errors.size} 个加载错误:"
+        errors.each { |e| puts "  - #{e[:const]} (#{e[:path]}): #{e[:error].message}" }
+      else
+        puts "所有 autoload 常量加载成功!"
+      end
+      puts "=" * 70
+
+      results
+    end
+
+    # 查找触发特定文件加载的常量
+    def find_constant_for_file(file_path, autoloads = RACK_AUTOLOADS)
+      normalized = file_path.gsub(/\.rb$/, '').gsub(/^lib\//, '')
+      autoloads.select { |_, path| path.include?(normalized) || normalized.include?(path) }
+    end
+
+    # 使用 TracePoint 追踪 autoload 触发
+    def trace_autoload
+      trace = TracePoint.new(:call, :c_call) do |tp|
+        if tp.method_id == :require || tp.method_id == :autoload
+          puts "[TRACE] #{tp.method_id} called from #{tp.path}:#{tp.lineno}"
+        end
+      end
+
+      trace.enable
+      yield
+    ensure
+      trace.disable
+    end
+
+    # 模拟文件缺失并测试
+    def simulate_missing_file(file_path)
+      return unless File.exist?(file_path)
+
+      backup = "#{file_path}.debug_backup"
+      File.rename(file_path, backup)
+      puts "已临时移动: #{file_path} -> #{backup}"
+
+      begin
+        yield
+      ensure
+        File.rename(backup, file_path)
+        puts "已恢复: #{backup} -> #{file_path}"
+      end
+    end
+  end
+end
+
+# 如果直接运行此脚本，执行测试
+if __FILE__ == $0
+  require_relative 'lib/rack'
+
+  puts "测试所有 Rack autoload 常量:"
+  RackAutoloadDebugger.test_all
+
+  puts "\n\n查找触发 'rack/bad_request' 的常量:"
+  matches = RackAutoloadDebugger.find_constant_for_file('rack/bad_request')
+  if matches.any?
+    matches.each { |k, v| puts "  #{k} -> #{v}" }
+  else
+    puts "  未找到"
+  end
+end
