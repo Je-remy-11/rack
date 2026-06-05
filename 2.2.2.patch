@@ -1,0 +1,43 @@
+diff --git a/autoload_require_probe.rb b/autoload_require_probe.rb
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/autoload_require_probe.rb
+@@ -0,0 +1,35 @@
++# frozen_string_literal: true
++
++module AutoloadRequireProbe
++  def self.autoload_constants_for(path)
++    ObjectSpace.each_object(Module).flat_map do |owner|
++      begin
++        owner.constants(false).filter_map do |const_name|
++          next unless owner.autoload?(const_name) == path
++
++          owner_name = owner.name
++          owner_name && !owner_name.empty? ? "#{owner_name}::#{const_name}" : const_name.to_s
++        end
++      rescue NameError
++        []
++      end
++    end.sort
++  end
++
++  def require(path)
++    autoload_constants = AutoloadRequireProbe.autoload_constants_for(path)
++    super
++  rescue LoadError => e
++    raise unless autoload_constants.any?
++
++    location = caller_locations(1, 1).first
++    message = +e.message
++    message << "\nautoload constant(s): #{autoload_constants.join(', ')}"
++    message << "\nrequire path: #{path}"
++    message << "\ntriggered from: #{location.path}:#{location.lineno}" if location
++
++    error = e.exception(message)
++    error.set_backtrace(e.backtrace)
++    raise error
++  end
++end
++
++Kernel.prepend(AutoloadRequireProbe) unless Kernel < AutoloadRequireProbe
