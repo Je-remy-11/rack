@@ -13,7 +13,6 @@ task :deps do
   spec.dependencies.each do |dep|
     reqs = dep.requirements_list
     reqs = (["-v"] * reqs.size).zip(reqs).flatten
-    # Use system over sh, because we want to ignore errors!
     system Gem.ruby, "-S", "gem", "install", '--conservative', dep.name, *reqs
   end
 end
@@ -40,6 +39,51 @@ end
 
 def release
   "rack-" + File.read('lib/rack/version.rb')[/RELEASE += +([\"\'])([\d][\w\.]+)\1/, 2]
+end
+
+def rack_autoload_targets(mod, namespace = mod.name)
+  mod.constants(false).sort.each_with_object([]) do |constant_name, targets|
+    feature = mod.autoload?(constant_name)
+
+    if feature
+      targets << ["#{namespace}::#{constant_name}", File.join('lib', "#{feature}.rb")]
+      next
+    end
+
+    next unless mod.const_defined?(constant_name, false)
+
+    constant = mod.const_get(constant_name, false)
+    next unless constant.is_a?(Module)
+
+    targets.concat(rack_autoload_targets(constant, "#{namespace}::#{constant_name}"))
+  end
+end
+
+def missing_rack_autoload_files
+  require_relative 'lib/rack'
+
+  rack_autoload_targets(Rack).filter_map do |constant_name, file_path|
+    next if File.exist?(file_path)
+
+    [constant_name, file_path]
+  end
+end
+
+desc "Check that every autoload target declared in lib/rack.rb exists"
+task 'autoload:check' do
+  missing_files = missing_rack_autoload_files
+
+  if missing_files.empty?
+    puts 'All autoload targets resolve to existing files.'
+    next
+  end
+
+  puts 'Missing autoload files:'
+  missing_files.each do |constant_name, file_path|
+    puts "#{constant_name} -> #{file_path}"
+  end
+
+  raise "Found #{missing_files.size} missing autoload file(s)"
 end
 
 desc "Make binaries executable"
