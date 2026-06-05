@@ -14,6 +14,7 @@ task :deps do
     reqs = dep.requirements_list
     reqs = (["-v"] * reqs.size).zip(reqs).flatten
     # Use system over sh, because we want to ignore errors!
+    # Use system over sh, because we want to ignore errors!
     system Gem.ruby, "-S", "gem", "install", '--conservative', dep.name, *reqs
   end
 end
@@ -40,45 +41,6 @@ end
 
 def release
   "rack-" + File.read('lib/rack/version.rb')[/RELEASE += +([\"\'])([\d][\w\.]+)\1/, 2]
-end
-
-desc "Make binaries executable"
-task :chmod do
-  Dir["bin/*"].each { |binary| File.chmod(0755, binary) }
-  Dir["test/cgi/test*"].each { |binary| File.chmod(0755, binary) }
-end
-
-desc "Generate a ChangeLog"
-task changelog: "ChangeLog"
-
-file '.git/index'
-file "ChangeLog" => '.git/index' do
-  File.open("ChangeLog", "w") { |out|
-    log = `git log -z`
-    log.force_encoding(Encoding::BINARY)
-    log.split("\0").map { |chunk|
-      author = chunk[/Author: (.*)/, 1].strip
-      date = chunk[/Date: (.*)/, 1].strip
-      desc, detail = $'.strip.split("\n", 2)
-      detail ||= ""
-      detail = detail.gsub(/.*darcs-hash:.*/, '')
-      detail.rstrip!
-      out.puts "#{date}  #{author}"
-      out.puts "  * #{desc.strip}"
-      out.puts detail  unless detail.empty?
-      out.puts
-    }
-  }
-end
-
-desc "Generate Rack Specification"
-task spec: "SPEC.rdoc"
-
-file 'lib/rack/lint.rb'
-file "SPEC.rdoc" => 'lib/rack/lint.rb' do
-  line_pattern = /\A\s*## ?(?<text>.*?)(?<wrap>\\)?$/u
-
-  File.open("SPEC.rdoc", "wb", encoding: "UTF-8") do |file|
     IO.foreach("lib/rack/lint.rb", encoding: "UTF-8") do |line|
       if match = line_pattern.match(line)
         if match[:wrap]
@@ -140,3 +102,29 @@ task rdoc: %w[changelog spec] do
               `git ls-files lib/\*\*/\*.rb`.strip.split)
   cp "contrib/rdoc.css", "doc/rdoc.css"
 end
+
+desc "Check that all autoloaded files exist"
+task :check_autoload do
+  require_relative "lib/rack"
+  missing_files = []
+  
+  ObjectSpace.each_object(Module) do |mod|
+    next unless mod.name && mod.name.start_with?("Rack")
+    mod.constants.each do |const|
+      path = mod.autoload?(const)
+      if path
+        file_path = File.join(__dir__, "lib", "#{path}.rb")
+        unless File.exist?(file_path)
+          missing_files << "#{mod}::#{const} -> #{path}.rb"
+        end
+      end
+    end
+  end
+  
+  unless missing_files.empty?
+    abort "Missing autoload files:\n" + missing_files.join("\n")
+  end
+end
+
+task build: :check_autoload
+
