@@ -120,11 +120,37 @@ task "test:separate" do
   end
 end
 
+desc "Check that all autoloaded files exist"
+task "autoload:check" do
+  lib_dir = File.expand_path("lib", __dir__)
+  file = File.join(lib_dir, "rack.rb")
+  content = File.read(file)
+
+  missing = []
+
+  content.scan(/autoload\s+:(\w+),\s*"([^"]+)"/) do |constant, path|
+    rb_path = File.join(lib_dir, "#{path}.rb")
+    unless File.exist?(rb_path)
+      missing << [constant, path, rb_path]
+    end
+  end
+
+  if missing.any?
+    puts "ERROR: The following autoloaded files are missing:"
+    missing.each do |constant, path, full_path|
+      puts "  #{constant} => #{path} (expected at: #{full_path})"
+    end
+    exit 1
+  else
+    puts "All autoloaded files exist."
+  end
+end
+
 desc "Run all the fast + platform agnostic tests"
 task test: %w[spec test:regular test:separate]
 
 desc "Run all the tests we run on CI"
-task ci: :test
+task ci: %w[autoload:check test]
 
 task gem: :spec do
   sh "gem build rack.gemspec"
