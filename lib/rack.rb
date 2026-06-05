@@ -20,7 +20,6 @@ module Rack
   autoload :Builder, "rack/builder"
   autoload :Cascade, "rack/cascade"
   autoload :CommonLogger, "rack/common_logger"
-  autoload :Compression, "rack/compression"
   autoload :ConditionalGet, "rack/conditional_get"
   autoload :Config, "rack/config"
   autoload :ContentLength, "rack/content_length"
@@ -56,6 +55,7 @@ module Rack
   autoload :TempfileReaper, "rack/tempfile_reaper"
   autoload :URLMap, "rack/urlmap"
   autoload :Utils, "rack/utils"
+  autoload :Compression, "rack/compression"
 
   module Auth
     autoload :Basic, "rack/auth/basic"
