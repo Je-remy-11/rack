@@ -1,0 +1,52 @@
+# frozen_string_literal: true
+
+require_relative 'helper'
+
+describe Rack do
+  describe "autoloaded constants" do
+    def self.parse_autoloads_from(file_path)
+      source = File.read(file_path)
+      autoloads = []
+
+      current_module_path = []
+
+      source.each_line do |line|
+        case line
+        when /^\s*module\s+(\w+)/
+          current_module_path << $1
+        when /^\s*end/
+          current_module_path.pop
+        when /^\s+autoload\s+:(\w+),\s*"(.+)"/
+          const_name = $1
+          autoloads << [current_module_path.dup, const_name] unless current_module_path.empty?
+        end
+      end
+
+      autoloads
+    end
+
+    rack_rb_path = File.expand_path('../lib/rack.rb', __dir__)
+    autoload_entries = parse_autoloads_from(rack_rb_path)
+
+    autoload_entries.each do |module_path, const_name|
+      full_constant_name = (module_path + [const_name]).join("::")
+      parent_module = module_path.reduce(Object) { |mod, name| mod.const_get(name) }
+
+      it "loads #{full_constant_name} without LoadError" do
+        if parent_module.autoload?(const_name.to_sym)
+          # Autoload still registered — accessing will trigger file load
+        else
+          # Autoload already resolved (shared require file).
+          # The constant should already be defined.
+          assert parent_module.const_defined?(const_name, false),
+                 "#{full_constant_name} should be defined after autoload resolution"
+        end
+
+        value = parent_module.const_get(const_name)
+
+        assert_kind_of Module, value,
+                       "#{full_constant_name} should be a Class or Module"
+      end
+    end
+  end
+end
