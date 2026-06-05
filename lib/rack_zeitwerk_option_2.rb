@@ -1,0 +1,122 @@
+# frozen_string_literal: true
+
+# Rack Zeitwerk Option 2: Dual-Mode with Runtime Detection
+#
+# This approach detects at runtime whether the `zeitwerk` gem is available.
+#   - If Zeitwerk is present: configure a Zeitwerk loader with custom inflector
+#   - If Zeitwerk is absent:  fall back to traditional Ruby `autoload`
+#
+# This ensures maximum compatibility — projects that already use Zeitwerk
+# (e.g. Rails apps) get the benefits, while others continue to work as before.
+#
+# Key design decisions:
+#   - `Gem::Specification.find_by_name` is used to detect Zeitwerk without
+#     triggering a require that might fail in environments without the gem.
+#   - The same custom inflector from Option 1 is reused when Zeitwerk is active.
+#   - ForwardRequest is handled the same way: excluded from Zeitwerk eager-load
+#     and explicitly required, since it lives in recursive.rb alongside Recursive.
+
+require_relative 'rack/version'
+require_relative 'rack/constants'
+
+module Rack
+  class RackInflector < Zeitwerk::Inflector
+    EXCEPTIONS = {
+      'urlmap'              => 'URLMap',
+      'contenttype'         => 'ContentType',
+      'contentlength'       => 'ContentLength',
+      'commonlogger'        => 'CommonLogger',
+      'conditionalget'      => 'ConditionalGet',
+      'methodoverride'      => 'MethodOverride',
+      'mockrequest'         => 'MockRequest',
+      'mockresponse'        => 'MockResponse',
+      'nulllogger'          => 'NullLogger',
+      'queryparser'         => 'QueryParser',
+      'showexceptions'      => 'ShowExceptions',
+      'showstatus'          => 'ShowStatus',
+      'tempfilereaper'      => 'TempfileReaper',
+      'rewindableinput'     => 'RewindableInput',
+      'bodyproxy'           => 'BodyProxy',
+      'badrequest'          => 'BadRequest',
+      'mediatype'           => 'MediaType',
+      'forwardrequest'      => 'ForwardRequest'
+    }.freeze
+
+    def camelize(basename, abspath)
+      underscored = basename.delete_suffix('.rb')
+      EXCEPTIONS.fetch(underscored) { super }
+    end
+  end
+
+  class << self
+    attr_reader :loader
+  end
+
+  ZEITWERK_AVAILABLE = begin
+    Gem::Specification.find_by_name('zeitwerk')
+    true
+  rescue Gem::MissingSpecError
+    false
+  end
+
+  if ZEITWERK_AVAILABLE
+    require 'zeitwerk'
+
+    @loader = Zeitwerk::Loader.new
+    @loader.inflector = RackInflector.new
+    @loader.push_dir(__dir__, namespace: Rack)
+    @loader.do_not_eager_load("#{__dir__}/recursive.rb")
+    @loader.setup
+
+    require_relative 'rack/recursive'
+  else
+    @loader = nil
+
+    autoload :BadRequest, "rack/bad_request"
+    autoload :BodyProxy, "rack/body_proxy"
+    autoload :Builder, "rack/builder"
+    autoload :Cascade, "rack/cascade"
+    autoload :CommonLogger, "rack/common_logger"
+    autoload :ConditionalGet, "rack/conditional_get"
+    autoload :Config, "rack/config"
+    autoload :ContentLength, "rack/content_length"
+    autoload :ContentType, "rack/content_type"
+    autoload :Deflater, "rack/deflater"
+    autoload :Directory, "rack/directory"
+    autoload :ETag, "rack/etag"
+    autoload :Events, "rack/events"
+    autoload :Files, "rack/files"
+    autoload :ForwardRequest, "rack/recursive"
+    autoload :Head, "rack/head"
+    autoload :Headers, "rack/headers"
+    autoload :Lint, "rack/lint"
+    autoload :Lock, "rack/lock"
+    autoload :MediaType, "rack/media_type"
+    autoload :MethodOverride, "rack/method_override"
+    autoload :Mime, "rack/mime"
+    autoload :MockRequest, "rack/mock_request"
+    autoload :MockResponse, "rack/mock_response"
+    autoload :Multipart, "rack/multipart"
+    autoload :NullLogger, "rack/null_logger"
+    autoload :QueryParser, "rack/query_parser"
+    autoload :Recursive, "rack/recursive"
+    autoload :Reloader, "rack/reloader"
+    autoload :Request, "rack/request"
+    autoload :Response, "rack/response"
+    autoload :RewindableInput, "rack/rewindable_input"
+    autoload :Runtime, "rack/runtime"
+    autoload :Sendfile, "rack/sendfile"
+    autoload :ShowExceptions, "rack/show_exceptions"
+    autoload :ShowStatus, "rack/show_status"
+    autoload :Static, "rack/static"
+    autoload :TempfileReaper, "rack/tempfile_reaper"
+    autoload :URLMap, "rack/urlmap"
+    autoload :Utils, "rack/utils"
+
+    module Auth
+      autoload :Basic, "rack/auth/basic"
+      autoload :AbstractHandler, "rack/auth/abstract/handler"
+      autoload :AbstractRequest, "rack/auth/abstract/request"
+    end
+  end
+end
