@@ -1,0 +1,111 @@
+diff --git a/2.2.2.patch b/2.2.2.patch
+new file mode 100644
+index 00000000..3b4af64e
+--- /dev/null
++++ b/2.2.2.patch
+@@ -0,0 +1,51 @@
++diff --git a/autoload_require_probe.rb b/autoload_require_probe.rb
++new file mode 100644
++index 0000000..17470dc
++--- /dev/null
+++++ b/autoload_require_probe.rb
++@@ -0,0 +1,41 @@
+++# frozen_string_literal: true
+++
+++module AutoloadRequireProbe
+++  def require(path)
+++    super
+++  rescue LoadError => error
+++    autoloads = AutoloadRequireProbe.find_autoloads(path)
+++    raise error if autoloads.empty?
+++
+++    details = autoloads.map { |entry| "#{entry[:owner]}::#{entry[:constant]} => #{entry[:path]}" }.uniq.join(", ")
+++    raise LoadError, "#{error.message}\nautoload probe: #{details}", error.backtrace
+++  end
+++
+++  def self.find_autoloads(path)
+++    normalized_path = path.to_s
+++
+++    ObjectSpace.each_object(Module).each_with_object([]) do |mod, matches|
+++      owner = module_name(mod)
+++      next unless owner
+++
+++      mod.constants(false).each do |constant|
+++        autoload_path = autoload_path_for(mod, constant)
+++        next unless autoload_path == normalized_path
+++
+++        matches << { owner: owner, constant: constant, path: autoload_path }
+++      end
+++    end
+++  end
+++
+++  def self.autoload_path_for(mod, constant)
+++    mod.autoload?(constant)
+++  rescue NameError
+++    nil
+++  end
+++
+++  def self.module_name(mod)
+++    mod.name
+++  rescue StandardError
+++    nil
+++  end
+++end
+++
+++module Kernel
+++  prepend AutoloadRequireProbe
+++end
+diff --git a/2.2.3.patch b/2.2.3.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/autoload_require_probe.rb b/autoload_require_probe.rb
+new file mode 100644
+index 00000000..59b48590
+--- /dev/null
++++ b/autoload_require_probe.rb
+@@ -0,0 +1,45 @@
++# frozen_string_literal: true
++
++module AutoloadRequireProbe
++  def require(path)
++    super
++  rescue LoadError => error
++    autoloads = AutoloadRequireProbe.find_autoloads(path)
++    raise error if autoloads.empty?
++
++    details = autoloads.map { |entry| "#{entry[:owner]}::#{entry[:constant]} => #{entry[:path]}" }.uniq.join(", ")
++    raise LoadError, "#{error.message}\nautoload probe: #{details}", error.backtrace
++  end
++
++  def self.find_autoloads(path)
++    normalized_path = path.to_s
++
++    ObjectSpace.each_object(Module).each_with_object([]) do |mod, matches|
++      owner = module_name(mod)
++      next unless owner
++
++      mod.constants(false).each do |constant|
++        autoload_path = autoload_path_for(mod, constant)
++        next unless autoload_path == normalized_path
++
++        matches << { owner: owner, constant: constant, path: autoload_path }
++      end
++    end
++  end
++
++  def self.autoload_path_for(mod, constant)
++    mod.autoload?(constant)
++  rescue NameError
++    nil
++  end
++
++  def self.module_name(mod)
++    mod.name
++  rescue StandardError
++    nil
++  end
++end
++
++module Kernel
++  prepend AutoloadRequireProbe
++end

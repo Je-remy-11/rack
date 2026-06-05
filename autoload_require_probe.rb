@@ -1,0 +1,45 @@
+# frozen_string_literal: true
+
+module AutoloadRequireProbe
+  def require(path)
+    super
+  rescue LoadError => error
+    autoloads = AutoloadRequireProbe.find_autoloads(path)
+    raise error if autoloads.empty?
+
+    details = autoloads.map { |entry| "#{entry[:owner]}::#{entry[:constant]} => #{entry[:path]}" }.uniq.join(", ")
+    raise LoadError, "#{error.message}\nautoload probe: #{details}", error.backtrace
+  end
+
+  def self.find_autoloads(path)
+    normalized_path = path.to_s
+
+    ObjectSpace.each_object(Module).each_with_object([]) do |mod, matches|
+      owner = module_name(mod)
+      next unless owner
+
+      mod.constants(false).each do |constant|
+        autoload_path = autoload_path_for(mod, constant)
+        next unless autoload_path == normalized_path
+
+        matches << { owner: owner, constant: constant, path: autoload_path }
+      end
+    end
+  end
+
+  def self.autoload_path_for(mod, constant)
+    mod.autoload?(constant)
+  rescue NameError
+    nil
+  end
+
+  def self.module_name(mod)
+    mod.name
+  rescue StandardError
+    nil
+  end
+end
+
+module Kernel
+  prepend AutoloadRequireProbe
+end
