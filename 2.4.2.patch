@@ -1,0 +1,26 @@
+diff --git a/lib/rack.rb b/lib/rack.rb
+index 5cc52ba4..ccfe24aa 100644
+--- a/lib/rack.rb
++++ b/lib/rack.rb
+@@ -20,6 +20,7 @@ module Rack
+   autoload :Builder, "rack/builder"
+   autoload :Cascade, "rack/cascade"
+   autoload :CommonLogger, "rack/common_logger"
++  autoload :Compression, "rack/compression"
+   autoload :ConditionalGet, "rack/conditional_get"
+   autoload :Config, "rack/config"
+   autoload :ContentLength, "rack/content_length"
+diff --git a/lib/rack/compression.rb b/lib/rack/compression.rb
+new file mode 100644
+index 00000000..fde745be
+--- /dev/null
++++ b/lib/rack/compression.rb
+@@ -0,0 +1,8 @@
++# frozen_string_literal: true
++
++require_relative "deflater"
++
++module Rack
++  class Compression < Deflater
++  end
++end
