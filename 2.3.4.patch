@@ -1,474 +1,619 @@
-diff --git a/lib/rack_zeitwerk_option_1.rb b/lib/rack_zeitwerk_option_1.rb
-new file mode 100644
-index 00000000..63bfc784
---- /dev/null
-+++ b/lib/rack_zeitwerk_option_1.rb
-@@ -0,0 +1,196 @@
-+# frozen_string_literal: true
-+
-+# OPTION 1: Conditional Zeitwerk with autoload fallback
-+#
-+# Design:
-+#   - Uses Zeitwerk as the primary autoloading mechanism when available.
-+#   - Falls back to Ruby's built-in Module#autoload when Zeitwerk is not loaded.
-+#   - The loader setup is extracted into a dedicated class method Rack.setup_loader!,
-+#     keeping the module body clean and focused.
-+#   - This approach is ideal for gems that want to offer Zeitwerk support
-+#     in development without breaking existing deployments on older Ruby versions.
-+#
-+# Usage in development (with Zeitwerk installed):
-+#   require 'rack'
-+#   Rack.setup_loader!(:zeitwerk)
-+#
-+# Usage in production (no Zeitwerk, traditional autoload):
-+#   require 'rack'
-+#   Rack.setup_loader!(:autoload)   # or simply omit the call, defaults to :autoload
-+
-+require_relative 'rack/version'
-+require_relative 'rack/constants'
-+
-+module Rack
-+  class << self
-+    # Holds the active loader instance (either a Zeitwerk loader or nil).
-+    attr_reader :loader
-+
-+    # Configure which autoloading mechanism to use.
-+    #
-+    #   Rack.setup_loader!(:zeitwerk)  # uses Zeitwerk if available
-+    #   Rack.setup_loader!(:autoload)  # uses Ruby Module#autoload (default)
-+    #
-+    # Raises LoadError if :zeitwerk is requested but the gem is not installed.
-+    def setup_loader!(mode = :autoload)
-+      case mode
-+      when :zeitwerk
-+        setup_zeitwerk!
-+      when :autoload
-+        setup_autoload!
-+      else
-+        raise ArgumentError, "Unknown loader mode: #{mode.inspect}. Supported: :zeitwerk, :autoload"
-+      end
-+    end
-+
-+    private
-+
-+    # Configure Zeitwerk as the autoloader.
-+    # Requires the 'zeitwerk' gem and pushes all Rack constants into
-+    # a dedicated loader instance so it can manage file-to-constant mapping.
-+    def setup_zeitwerk!
-+      require 'zeitwerk'
-+
-+      @loader = Zeitwerk::Loader.new
-+      @loader.tag = "rack"
-+
-+      # Register the root directory for Zeitwerk's autovivification.
-+      # Zeitwerk derives constants from the file system:
-+      #   lib/rack/body_proxy.rb  =>  Rack::BodyProxy
-+      #   lib/rack/auth/basic.rb  =>  Rack::Auth::Basic
-+      @loader.push_dir(::File.expand_path(__dir__))
-+
-+      # ── Custom inflections ──────────────────────────────────────
-+      # Zeitwerk's default inflection uses #capitalize which handles
-+      # most cases, but some Rack constants require explicit overrides.
-+      @loader.inflector.inflect(
-+        "etag"       => "ETag",
-+        "urlmap"     => "URLMap",
-+        "mime"       => "Mime",
-+        "head"       => "Head",
-+        "lint"       => "Lint",
-+        "cascade"    => "Cascade",
-+        "deflater"   => "Deflater",
-+        "sendfile"   => "Sendfile",
-+        "recursive"  => "Recursive",
-+        "reloader"   => "Reloader",
-+        "runtime"    => "Runtime",
-+        "static"     => "Static",
-+        "lock"       => "Lock",
-+        "builder"    => "Builder",
-+        "directory"  => "Directory",
-+        "events"     => "Events",
-+        "files"      => "Files",
-+        "mock"       => "Mock",
-+        "multipart"  => "Multipart",
-+        "null_logger"                => "NullLogger",
-+        "body_proxy"                 => "BodyProxy",
-+        "common_logger"              => "CommonLogger",
-+        "conditional_get"            => "ConditionalGet",
-+        "content_length"             => "ContentLength",
-+        "content_type"               => "ContentType",
-+        "bad_request"                => "BadRequest",
-+        "method_override"            => "MethodOverride",
-+        "mock_request"               => "MockRequest",
-+        "mock_response"              => "MockResponse",
-+        "query_parser"               => "QueryParser",
-+        "rewindable_input"           => "RewindableInput",
-+        "show_exceptions"            => "ShowExceptions",
-+        "show_status"                => "ShowStatus",
-+        "tempfile_reaper"            => "TempfileReaper",
-+        "media_type"                 => "MediaType",
-+        # Auth sub-module
-+        "basic"                      => "Basic",
-+        "handler"                    => "AbstractHandler",
-+        "request"                    => "AbstractRequest",
-+        # Multipart sub-module
-+        "generator"                  => "Generator",
-+        "parser"                     => "Parser",
-+        "uploaded_file"              => "UploadedFile"
-+      )
-+
-+      # Explicitly ignore the main rack.rb entry-point and version/constants
-+      # files since they are already loaded via require_relative.
-+      @loader.do_not_eager_load(
-+        ::File.expand_path("rack.rb", __dir__),
-+        ::File.expand_path("rack/version.rb", __dir__),
-+        ::File.expand_path("rack/constants.rb", __dir__),
-+        ::File.expand_path("rack/mock.rb", __dir__)
-+      )
-+
-+      @loader.setup
-+    end
-+
-+    # Fall back to traditional Ruby Module#autoload.
-+    # This codifies the classic Rack autoload declarations so they stay
-+    # in one place and are easy to maintain.
-+    def setup_autoload!
-+      @loader = nil
-+
-+      autoload :BadRequest, "rack/bad_request"
-+      autoload :BodyProxy, "rack/body_proxy"
-+      autoload :Builder, "rack/builder"
-+      autoload :Cascade, "rack/cascade"
-+      autoload :CommonLogger, "rack/common_logger"
-+      autoload :ConditionalGet, "rack/conditional_get"
-+      autoload :Config, "rack/config"
-+      autoload :ContentLength, "rack/content_length"
-+      autoload :ContentType, "rack/content_type"
-+      autoload :Deflater, "rack/deflater"
-+      autoload :Directory, "rack/directory"
-+      autoload :ETag, "rack/etag"
-+      autoload :Events, "rack/events"
-+      autoload :Files, "rack/files"
-+      autoload :ForwardRequest, "rack/recursive"
-+      autoload :Head, "rack/head"
-+      autoload :Headers, "rack/headers"
-+      autoload :Lint, "rack/lint"
-+      autoload :Lock, "rack/lock"
-+      autoload :MediaType, "rack/media_type"
-+      autoload :MethodOverride, "rack/method_override"
-+      autoload :Mime, "rack/mime"
-+      autoload :MockRequest, "rack/mock_request"
-+      autoload :MockResponse, "rack/mock_response"
-+      autoload :Multipart, "rack/multipart"
-+      autoload :NullLogger, "rack/null_logger"
-+      autoload :QueryParser, "rack/query_parser"
-+      autoload :Recursive, "rack/recursive"
-+      autoload :Reloader, "rack/reloader"
-+      autoload :Request, "rack/request"
-+      autoload :Response, "rack/response"
-+      autoload :RewindableInput, "rack/rewindable_input"
-+      autoload :Runtime, "rack/runtime"
-+      autoload :Sendfile, "rack/sendfile"
-+      autoload :ShowExceptions, "rack/show_exceptions"
-+      autoload :ShowStatus, "rack/show_status"
-+      autoload :Static, "rack/static"
-+      autoload :TempfileReaper, "rack/tempfile_reaper"
-+      autoload :URLMap, "rack/urlmap"
-+      autoload :Utils, "rack/utils"
-+
-+      module Auth
-+        autoload :Basic, "rack/auth/basic"
-+        autoload :AbstractHandler, "rack/auth/abstract/handler"
-+        autoload :AbstractRequest, "rack/auth/abstract/request"
-+      end
-+    end
-+  end
-+
-+  # ── Eager-loading helper ───────────────────────────────────────────
-+  # When Zeitwerk is active you may want to eager-load all Rack constants
-+  # in production.  This method exposes that in a loader-agnostic way.
-+  def self.eager_load!
-+    if @loader
-+      @loader.eager_load
-+    else
-+      # With Module#autoload there is no built-in eager-loading mechanism,
-+      # but you could walk the constant table and +require+ each one:
-+      constants(false).each do |c|
-+        const_get(c)
-+      end
-+      Auth.constants(false).each do |c|
-+        Auth.const_get(c)
-+      end
-+    end
-+  end
+diff --git a/2.3.4.patch b/2.3.4.patch
+index 82ed0528..e69de29b 100644
+--- a/2.3.4.patch
++++ b/2.3.4.patch
+@@ -1,475 +0,0 @@
+-diff --git a/lib/rack_zeitwerk_option_1.rb b/lib/rack_zeitwerk_option_1.rb
+-new file mode 100644
+-index 00000000..63bfc784
+---- /dev/null
+-+++ b/lib/rack_zeitwerk_option_1.rb
+-@@ -0,0 +1,196 @@
+-+# frozen_string_literal: true
+-+
+-+# OPTION 1: Conditional Zeitwerk with autoload fallback
+-+#
+-+# Design:
+-+#   - Uses Zeitwerk as the primary autoloading mechanism when available.
+-+#   - Falls back to Ruby's built-in Module#autoload when Zeitwerk is not loaded.
+-+#   - The loader setup is extracted into a dedicated class method Rack.setup_loader!,
+-+#     keeping the module body clean and focused.
+-+#   - This approach is ideal for gems that want to offer Zeitwerk support
+-+#     in development without breaking existing deployments on older Ruby versions.
+-+#
+-+# Usage in development (with Zeitwerk installed):
+-+#   require 'rack'
+-+#   Rack.setup_loader!(:zeitwerk)
+-+#
+-+# Usage in production (no Zeitwerk, traditional autoload):
+-+#   require 'rack'
+-+#   Rack.setup_loader!(:autoload)   # or simply omit the call, defaults to :autoload
+-+
+-+require_relative 'rack/version'
+-+require_relative 'rack/constants'
+-+
+-+module Rack
+-+  class << self
+-+    # Holds the active loader instance (either a Zeitwerk loader or nil).
+-+    attr_reader :loader
+-+
+-+    # Configure which autoloading mechanism to use.
+-+    #
+-+    #   Rack.setup_loader!(:zeitwerk)  # uses Zeitwerk if available
+-+    #   Rack.setup_loader!(:autoload)  # uses Ruby Module#autoload (default)
+-+    #
+-+    # Raises LoadError if :zeitwerk is requested but the gem is not installed.
+-+    def setup_loader!(mode = :autoload)
+-+      case mode
+-+      when :zeitwerk
+-+        setup_zeitwerk!
+-+      when :autoload
+-+        setup_autoload!
+-+      else
+-+        raise ArgumentError, "Unknown loader mode: #{mode.inspect}. Supported: :zeitwerk, :autoload"
+-+      end
+-+    end
+-+
+-+    private
+-+
+-+    # Configure Zeitwerk as the autoloader.
+-+    # Requires the 'zeitwerk' gem and pushes all Rack constants into
+-+    # a dedicated loader instance so it can manage file-to-constant mapping.
+-+    def setup_zeitwerk!
+-+      require 'zeitwerk'
+-+
+-+      @loader = Zeitwerk::Loader.new
+-+      @loader.tag = "rack"
+-+
+-+      # Register the root directory for Zeitwerk's autovivification.
+-+      # Zeitwerk derives constants from the file system:
+-+      #   lib/rack/body_proxy.rb  =>  Rack::BodyProxy
+-+      #   lib/rack/auth/basic.rb  =>  Rack::Auth::Basic
+-+      @loader.push_dir(::File.expand_path(__dir__))
+-+
+-+      # ── Custom inflections ──────────────────────────────────────
+-+      # Zeitwerk's default inflection uses #capitalize which handles
+-+      # most cases, but some Rack constants require explicit overrides.
+-+      @loader.inflector.inflect(
+-+        "etag"       => "ETag",
+-+        "urlmap"     => "URLMap",
+-+        "mime"       => "Mime",
+-+        "head"       => "Head",
+-+        "lint"       => "Lint",
+-+        "cascade"    => "Cascade",
+-+        "deflater"   => "Deflater",
+-+        "sendfile"   => "Sendfile",
+-+        "recursive"  => "Recursive",
+-+        "reloader"   => "Reloader",
+-+        "runtime"    => "Runtime",
+-+        "static"     => "Static",
+-+        "lock"       => "Lock",
+-+        "builder"    => "Builder",
+-+        "directory"  => "Directory",
+-+        "events"     => "Events",
+-+        "files"      => "Files",
+-+        "mock"       => "Mock",
+-+        "multipart"  => "Multipart",
+-+        "null_logger"                => "NullLogger",
+-+        "body_proxy"                 => "BodyProxy",
+-+        "common_logger"              => "CommonLogger",
+-+        "conditional_get"            => "ConditionalGet",
+-+        "content_length"             => "ContentLength",
+-+        "content_type"               => "ContentType",
+-+        "bad_request"                => "BadRequest",
+-+        "method_override"            => "MethodOverride",
+-+        "mock_request"               => "MockRequest",
+-+        "mock_response"              => "MockResponse",
+-+        "query_parser"               => "QueryParser",
+-+        "rewindable_input"           => "RewindableInput",
+-+        "show_exceptions"            => "ShowExceptions",
+-+        "show_status"                => "ShowStatus",
+-+        "tempfile_reaper"            => "TempfileReaper",
+-+        "media_type"                 => "MediaType",
+-+        # Auth sub-module
+-+        "basic"                      => "Basic",
+-+        "handler"                    => "AbstractHandler",
+-+        "request"                    => "AbstractRequest",
+-+        # Multipart sub-module
+-+        "generator"                  => "Generator",
+-+        "parser"                     => "Parser",
+-+        "uploaded_file"              => "UploadedFile"
+-+      )
+-+
+-+      # Explicitly ignore the main rack.rb entry-point and version/constants
+-+      # files since they are already loaded via require_relative.
+-+      @loader.do_not_eager_load(
+-+        ::File.expand_path("rack.rb", __dir__),
+-+        ::File.expand_path("rack/version.rb", __dir__),
+-+        ::File.expand_path("rack/constants.rb", __dir__),
+-+        ::File.expand_path("rack/mock.rb", __dir__)
+-+      )
+-+
+-+      @loader.setup
+-+    end
+-+
+-+    # Fall back to traditional Ruby Module#autoload.
+-+    # This codifies the classic Rack autoload declarations so they stay
+-+    # in one place and are easy to maintain.
+-+    def setup_autoload!
+-+      @loader = nil
+-+
+-+      autoload :BadRequest, "rack/bad_request"
+-+      autoload :BodyProxy, "rack/body_proxy"
+-+      autoload :Builder, "rack/builder"
+-+      autoload :Cascade, "rack/cascade"
+-+      autoload :CommonLogger, "rack/common_logger"
+-+      autoload :ConditionalGet, "rack/conditional_get"
+-+      autoload :Config, "rack/config"
+-+      autoload :ContentLength, "rack/content_length"
+-+      autoload :ContentType, "rack/content_type"
+-+      autoload :Deflater, "rack/deflater"
+-+      autoload :Directory, "rack/directory"
+-+      autoload :ETag, "rack/etag"
+-+      autoload :Events, "rack/events"
+-+      autoload :Files, "rack/files"
+-+      autoload :ForwardRequest, "rack/recursive"
+-+      autoload :Head, "rack/head"
+-+      autoload :Headers, "rack/headers"
+-+      autoload :Lint, "rack/lint"
+-+      autoload :Lock, "rack/lock"
+-+      autoload :MediaType, "rack/media_type"
+-+      autoload :MethodOverride, "rack/method_override"
+-+      autoload :Mime, "rack/mime"
+-+      autoload :MockRequest, "rack/mock_request"
+-+      autoload :MockResponse, "rack/mock_response"
+-+      autoload :Multipart, "rack/multipart"
+-+      autoload :NullLogger, "rack/null_logger"
+-+      autoload :QueryParser, "rack/query_parser"
+-+      autoload :Recursive, "rack/recursive"
+-+      autoload :Reloader, "rack/reloader"
+-+      autoload :Request, "rack/request"
+-+      autoload :Response, "rack/response"
+-+      autoload :RewindableInput, "rack/rewindable_input"
+-+      autoload :Runtime, "rack/runtime"
+-+      autoload :Sendfile, "rack/sendfile"
+-+      autoload :ShowExceptions, "rack/show_exceptions"
+-+      autoload :ShowStatus, "rack/show_status"
+-+      autoload :Static, "rack/static"
+-+      autoload :TempfileReaper, "rack/tempfile_reaper"
+-+      autoload :URLMap, "rack/urlmap"
+-+      autoload :Utils, "rack/utils"
+-+
+-+      module Auth
+-+        autoload :Basic, "rack/auth/basic"
+-+        autoload :AbstractHandler, "rack/auth/abstract/handler"
+-+        autoload :AbstractRequest, "rack/auth/abstract/request"
+-+      end
+-+    end
+-+  end
+-+
+-+  # ── Eager-loading helper ───────────────────────────────────────────
+-+  # When Zeitwerk is active you may want to eager-load all Rack constants
+-+  # in production.  This method exposes that in a loader-agnostic way.
+-+  def self.eager_load!
+-+    if @loader
+-+      @loader.eager_load
+-+    else
+-+      # With Module#autoload there is no built-in eager-loading mechanism,
+-+      # but you could walk the constant table and +require+ each one:
+-+      constants(false).each do |c|
+-+        const_get(c)
+-+      end
+-+      Auth.constants(false).each do |c|
+-+        Auth.const_get(c)
+-+      end
+-+    end
+-+  end
+-+end
+-\ No newline at end of file
+-diff --git a/lib/rack_zeitwerk_option_2.rb b/lib/rack_zeitwerk_option_2.rb
+-new file mode 100644
+-index 00000000..483df768
+---- /dev/null
+-+++ b/lib/rack_zeitwerk_option_2.rb
+-@@ -0,0 +1,265 @@
+-+# frozen_string_literal: true
+-+
+-+# OPTION 2: Inflector-based dual-mode approach with explicit switching
+-+#
+-+# Design:
+-+#   - Keeps the autoload declarations inside the module body as a default
+-+#     so that +require 'rack'+ works out-of-the-box on any Ruby.
+-+#   - Provides Rack.use_zeitwerk! that, when called, tears down the
+-+#     Module#autoload entries and hands over control to a custom Zeitwerk
+-+#     inflector.
+-+#   - The custom inflector (Rack::Inflector) implements the Zeitwerk
+-+#     inflector interface and also serves as a single source of truth
+-+#     for constant-to-file mappings — useful for documentation and tooling.
+-+#   - This approach is ideal when you want zero-config defaults while
+-+#     still giving power-users an opt-in path to Zeitwerk.
+-+#
+-+# Usage in development:
+-+#   require 'rack'
+-+#   Rack.use_zeitwerk!   # switches from autoload to Zeitwerk
+-+#
+-+# Usage in production (classic):
+-+#   require 'rack'        # autoload works as before, no changes needed
+-+
+-+require_relative 'rack/version'
+-+require_relative 'rack/constants'
+-+
+-+module Rack
+-+  # ── Single source of truth for constant-to-file mappings ──────────
+-+  # Used both by the legacy autoload calls below and by the Zeitwerk
+-+  # inflector.  Add new constants here only.
+-+  CONSTANT_MAPPINGS = {
+-+    # leaf constants under Rack::
+-+    "BadRequest"       => "rack/bad_request",
+-+    "BodyProxy"        => "rack/body_proxy",
+-+    "Builder"          => "rack/builder",
+-+    "Cascade"          => "rack/cascade",
+-+    "CommonLogger"     => "rack/common_logger",
+-+    "ConditionalGet"   => "rack/conditional_get",
+-+    "Config"           => "rack/config",
+-+    "ContentLength"    => "rack/content_length",
+-+    "ContentType"      => "rack/content_type",
+-+    "Deflater"         => "rack/deflater",
+-+    "Directory"        => "rack/directory",
+-+    "ETag"             => "rack/etag",
+-+    "Events"           => "rack/events",
+-+    "Files"            => "rack/files",
+-+    "ForwardRequest"   => "rack/recursive",
+-+    "Head"             => "rack/head",
+-+    "Headers"          => "rack/headers",
+-+    "Lint"             => "rack/lint",
+-+    "Lock"             => "rack/lock",
+-+    "MediaType"        => "rack/media_type",
+-+    "MethodOverride"   => "rack/method_override",
+-+    "Mime"             => "rack/mime",
+-+    "MockRequest"      => "rack/mock_request",
+-+    "MockResponse"     => "rack/mock_response",
+-+    "Multipart"        => "rack/multipart",
+-+    "NullLogger"       => "rack/null_logger",
+-+    "QueryParser"      => "rack/query_parser",
+-+    "Recursive"        => "rack/recursive",
+-+    "Reloader"         => "rack/reloader",
+-+    "Request"          => "rack/request",
+-+    "Response"         => "rack/response",
+-+    "RewindableInput"  => "rack/rewindable_input",
+-+    "Runtime"          => "rack/runtime",
+-+    "Sendfile"         => "rack/sendfile",
+-+    "ShowExceptions"   => "rack/show_exceptions",
+-+    "ShowStatus"       => "rack/show_status",
+-+    "Static"           => "rack/static",
+-+    "TempfileReaper"   => "rack/tempfile_reaper",
+-+    "URLMap"           => "rack/urlmap",
+-+    "Utils"            => "rack/utils",
+-+
+-+    # Auth sub-module constants
+-+    "Auth::Basic"          => "rack/auth/basic",
+-+    "Auth::AbstractHandler" => "rack/auth/abstract/handler",
+-+    "Auth::AbstractRequest" => "rack/auth/abstract/request",
+-+  }.freeze
+-+
+-+  # ── Default: classic Module#autoload (zero-config) ────────────────
+-+  autoload :BadRequest, "rack/bad_request"
+-+  autoload :BodyProxy, "rack/body_proxy"
+-+  autoload :Builder, "rack/builder"
+-+  autoload :Cascade, "rack/cascade"
+-+  autoload :CommonLogger, "rack/common_logger"
+-+  autoload :ConditionalGet, "rack/conditional_get"
+-+  autoload :Config, "rack/config"
+-+  autoload :ContentLength, "rack/content_length"
+-+  autoload :ContentType, "rack/content_type"
+-+  autoload :Deflater, "rack/deflater"
+-+  autoload :Directory, "rack/directory"
+-+  autoload :ETag, "rack/etag"
+-+  autoload :Events, "rack/events"
+-+  autoload :Files, "rack/files"
+-+  autoload :ForwardRequest, "rack/recursive"
+-+  autoload :Head, "rack/head"
+-+  autoload :Headers, "rack/headers"
+-+  autoload :Lint, "rack/lint"
+-+  autoload :Lock, "rack/lock"
+-+  autoload :MediaType, "rack/media_type"
+-+  autoload :MethodOverride, "rack/method_override"
+-+  autoload :Mime, "rack/mime"
+-+  autoload :MockRequest, "rack/mock_request"
+-+  autoload :MockResponse, "rack/mock_response"
+-+  autoload :Multipart, "rack/multipart"
+-+  autoload :NullLogger, "rack/null_logger"
+-+  autoload :QueryParser, "rack/query_parser"
+-+  autoload :Recursive, "rack/recursive"
+-+  autoload :Reloader, "rack/reloader"
+-+  autoload :Request, "rack/request"
+-+  autoload :Response, "rack/response"
+-+  autoload :RewindableInput, "rack/rewindable_input"
+-+  autoload :Runtime, "rack/runtime"
+-+  autoload :Sendfile, "rack/sendfile"
+-+  autoload :ShowExceptions, "rack/show_exceptions"
+-+  autoload :ShowStatus, "rack/show_status"
+-+  autoload :Static, "rack/static"
+-+  autoload :TempfileReaper, "rack/tempfile_reaper"
+-+  autoload :URLMap, "rack/urlmap"
+-+  autoload :Utils, "rack/utils"
+-+
+-+  module Auth
+-+    autoload :Basic, "rack/auth/basic"
+-+    autoload :AbstractHandler, "rack/auth/abstract/handler"
+-+    autoload :AbstractRequest, "rack/auth/abstract/request"
+-+  end
+-+
+-+  # ── Custom Zeitwerk inflector ──────────────────────────────────────
+-+  # Implements the Zeitwek::Inflector interface so that:
+-+  #   1. We can override specific acronyms (ETag, URLMap, etc.).
+-+  #   2. We do not need to repeat the mapping in two places — this
+-+  #      class can optionally use CONSTANT_MAPPINGS as a validation
+-+  #      source.
+-+  class Inflector
+-+    INFLECTIONS = {
+-+      "etag"       => "ETag",
+-+      "urlmap"     => "URLMap",
+-+      "mime"       => "Mime",
+-+      "head"       => "Head",
+-+      "lint"       => "Lint",
+-+      "cascade"    => "Cascade",
+-+      "deflater"   => "Deflater",
+-+      "sendfile"   => "Sendfile",
+-+      "recursive"  => "Recursive",
+-+      "reloader"   => "Reloader",
+-+      "runtime"    => "Runtime",
+-+      "static"     => "Static",
+-+      "lock"       => "Lock",
+-+      "builder"    => "Builder",
+-+      "directory"  => "Directory",
+-+      "events"     => "Events",
+-+      "files"      => "Files",
+-+      "mock"       => "Mock",
+-+      "multipart"  => "Multipart",
+-+      "body_proxy"                 => "BodyProxy",
+-+      "common_logger"              => "CommonLogger",
+-+      "conditional_get"            => "ConditionalGet",
+-+      "content_length"             => "ContentLength",
+-+      "content_type"               => "ContentType",
+-+      "bad_request"                => "BadRequest",
+-+      "method_override"            => "MethodOverride",
+-+      "mock_request"               => "MockRequest",
+-+      "mock_response"              => "MockResponse",
+-+      "query_parser"               => "QueryParser",
+-+      "rewindable_input"           => "RewindableInput",
+-+      "show_exceptions"            => "ShowExceptions",
+-+      "show_status"                => "ShowStatus",
+-+      "tempfile_reaper"            => "TempfileReaper",
+-+      "media_type"                 => "MediaType",
+-+      "null_logger"                => "NullLogger",
+-+      "generator"                  => "Generator",
+-+      "parser"                     => "Parser",
+-+      "uploaded_file"              => "UploadedFile",
+-+      "handler"                    => "AbstractHandler",
+-+      "request"                    => "AbstractRequest",
+-+      "basic"                      => "Basic",
+-+    }.freeze
+-+
+-+    # Zeitwerk calls +camelize+ with the basename (without extension)
+-+    # of each Ruby file it manages.
+-+    def camelize(basename, _abspath)
+-+      INFLECTIONS.fetch(basename) do
+-+        basename.split("_").map(&:capitalize).join
+-+      end
+-+    end
+-+  end
+-+
+-+  class << self
+-+    # Holds the Zeitwerk loader once +use_zeitwerk!+ is called.
+-+    attr_reader :zeitwerk_loader
+-+
+-+    # Whether Zeitwerk mode is active.
+-+    def zeitwerk_mode?
+-+      instance_variable_defined?(:@zeitwerk_loader) && !@zeitwerk_loader.nil?
+-+    end
+-+
+-+    # Activate Zeitwerk as the autoloader.
+-+    #
+-+    # 1. Requires 'zeitwerk'.
+-+    # 2. Removes all Module#autoload registrations under Rack so they
+-+    #    do not conflict with Zeitwerk's own constant management.
+-+    # 3. Pushes the load path and configures the custom inflector.
+-+    #
+-+    # Safe to call multiple times — subsequent calls are no-ops.
+-+    def use_zeitwerk!
+-+      return self if zeitwerk_mode?
+-+
+-+      require 'zeitwerk'
+-+
+-+      # Tear down legacy autoload entries to prevent double-autoload
+-+      # warnings or constant redefinition issues.
+-+      remove_autoloads!
+-+
+-+      @zeitwerk_loader = Zeitwerk::Loader.new
+-+      @zeitwerk_loader.tag = "rack"
+-+      @zeitwerk_loader.inflector = Rack::Inflector.new
+-+      @zeitwerk_loader.push_dir(::File.expand_path(__dir__))
+-+
+-+      # Files already loaded explicitly should not be managed by Zeitwerk.
+-+      @zeitwerk_loader.do_not_eager_load(
+-+        ::File.expand_path("rack.rb", __dir__),
+-+        ::File.expand_path("rack/version.rb", __dir__),
+-+        ::File.expand_path("rack/constants.rb", __dir__),
+-+        ::File.expand_path("rack/mock.rb", __dir__)
+-+      )
+-+
+-+      @zeitwerk_loader.setup
+-+
+-+      self
+-+    end
+-+
+-+    private
+-+
+-+    # Walk the current +autoload+ registrations under Rack and its
+-+    # sub-modules and remove them so that Zeitwerk can take over.
+-+    def remove_autoloads!
+-+      # Remove direct autoloads on Rack.
+-+      CONSTANT_MAPPINGS.each_key do |constant_name|
+-+        # Skip namespaced constants (e.g. "Auth::Basic") — handled below.
+-+        next if constant_name.include?("::")
+-+
+-+        # autoload? returns the path if registered, nil otherwise.
+-+        # We use remove_const to fully delete the autoload trigger.
+-+        Rack.send(:remove_const, constant_name) if Rack.autoload?(constant_name)
+-+      end
+-+
+-+      # Handle Auth sub-module constants.
+-+      %w[Basic AbstractHandler AbstractRequest].each do |name|
+-+        if Rack::Auth.autoload?(name)
+-+          Rack::Auth.send(:remove_const, name)
+-+        end
+-+      end
+-+    end
+-+  end
+-+
+-+  # ── Loader-agnostic eager-loading helper ───────────────────────────
+-+  def self.eager_load!
+-+    if zeitwerk_mode?
+-+      @zeitwerk_loader.eager_load
+-+    else
+-+      constants(false).each { |c| const_get(c) }
+-+      Auth.constants(false).each { |c| Auth.const_get(c) }
+-+    end
+-+  end
+-+end
+-\ No newline at end of file
+diff --git a/lib/rack.rb b/lib/rack.rb
+index 5cc52ba4..4bc52a77 100644
+--- a/lib/rack.rb
++++ b/lib/rack.rb
+@@ -8,57 +8,16 @@
+ # The Rack main module, serving as a namespace for all core Rack
+ # modules and classes.
+ #
+-# All modules meant for use in your application are <tt>autoload</tt>ed here,
+-# so it should be enough just to <tt>require 'rack'</tt> in your code.
+-
++# All modules meant for use in your application are loaded via
++# <tt>rack/autoloads</tt>, so it should be enough just to
++# <tt>require 'rack'</tt> in your code.
+ require_relative 'rack/version'
+ require_relative 'rack/constants'
++require_relative 'rack/autoloads'
+ 
+ module Rack
+-  autoload :BadRequest, "rack/bad_request"
+-  autoload :BodyProxy, "rack/body_proxy"
+-  autoload :Builder, "rack/builder"
+-  autoload :Cascade, "rack/cascade"
+-  autoload :CommonLogger, "rack/common_logger"
+-  autoload :ConditionalGet, "rack/conditional_get"
+-  autoload :Config, "rack/config"
+-  autoload :ContentLength, "rack/content_length"
+-  autoload :ContentType, "rack/content_type"
+-  autoload :Deflater, "rack/deflater"
+-  autoload :Directory, "rack/directory"
+-  autoload :ETag, "rack/etag"
+-  autoload :Events, "rack/events"
+-  autoload :Files, "rack/files"
+-  autoload :ForwardRequest, "rack/recursive"
+-  autoload :Head, "rack/head"
+-  autoload :Headers, "rack/headers"
+-  autoload :Lint, "rack/lint"
+-  autoload :Lock, "rack/lock"
+-  autoload :MediaType, "rack/media_type"
+-  autoload :MethodOverride, "rack/method_override"
+-  autoload :Mime, "rack/mime"
+-  autoload :MockRequest, "rack/mock_request"
+-  autoload :MockResponse, "rack/mock_response"
+-  autoload :Multipart, "rack/multipart"
+-  autoload :NullLogger, "rack/null_logger"
+-  autoload :QueryParser, "rack/query_parser"
+-  autoload :Recursive, "rack/recursive"
+-  autoload :Reloader, "rack/reloader"
+-  autoload :Request, "rack/request"
+-  autoload :Response, "rack/response"
+-  autoload :RewindableInput, "rack/rewindable_input"
+-  autoload :Runtime, "rack/runtime"
+-  autoload :Sendfile, "rack/sendfile"
+-  autoload :ShowExceptions, "rack/show_exceptions"
+-  autoload :ShowStatus, "rack/show_status"
+-  autoload :Static, "rack/static"
+-  autoload :TempfileReaper, "rack/tempfile_reaper"
+-  autoload :URLMap, "rack/urlmap"
+-  autoload :Utils, "rack/utils"
+-
+-  module Auth
+-    autoload :Basic, "rack/auth/basic"
+-    autoload :AbstractHandler, "rack/auth/abstract/handler"
+-    autoload :AbstractRequest, "rack/auth/abstract/request"
++  # Return the Rack release as a dotted string.
++  def self.release
++    VERSION
+   end
+-end
 +end
 \ No newline at end of file
-diff --git a/lib/rack_zeitwerk_option_2.rb b/lib/rack_zeitwerk_option_2.rb
+diff --git a/lib/rack/autoloads.rb b/lib/rack/autoloads.rb
 new file mode 100644
-index 00000000..483df768
+index 00000000..c2a9ec43
 --- /dev/null
-+++ b/lib/rack_zeitwerk_option_2.rb
-@@ -0,0 +1,265 @@
++++ b/lib/rack/autoloads.rb
+@@ -0,0 +1,62 @@
 +# frozen_string_literal: true
 +
-+# OPTION 2: Inflector-based dual-mode approach with explicit switching
-+#
-+# Design:
-+#   - Keeps the autoload declarations inside the module body as a default
-+#     so that +require 'rack'+ works out-of-the-box on any Ruby.
-+#   - Provides Rack.use_zeitwerk! that, when called, tears down the
-+#     Module#autoload entries and hands over control to a custom Zeitwerk
-+#     inflector.
-+#   - The custom inflector (Rack::Inflector) implements the Zeitwerk
-+#     inflector interface and also serves as a single source of truth
-+#     for constant-to-file mappings — useful for documentation and tooling.
-+#   - This approach is ideal when you want zero-config defaults while
-+#     still giving power-users an opt-in path to Zeitwerk.
-+#
-+# Usage in development:
-+#   require 'rack'
-+#   Rack.use_zeitwerk!   # switches from autoload to Zeitwerk
-+#
-+# Usage in production (classic):
-+#   require 'rack'        # autoload works as before, no changes needed
-+
-+require_relative 'rack/version'
-+require_relative 'rack/constants'
-+
 +module Rack
-+  # ── Single source of truth for constant-to-file mappings ──────────
-+  # Used both by the legacy autoload calls below and by the Zeitwerk
-+  # inflector.  Add new constants here only.
-+  CONSTANT_MAPPINGS = {
-+    # leaf constants under Rack::
-+    "BadRequest"       => "rack/bad_request",
-+    "BodyProxy"        => "rack/body_proxy",
-+    "Builder"          => "rack/builder",
-+    "Cascade"          => "rack/cascade",
-+    "CommonLogger"     => "rack/common_logger",
-+    "ConditionalGet"   => "rack/conditional_get",
-+    "Config"           => "rack/config",
-+    "ContentLength"    => "rack/content_length",
-+    "ContentType"      => "rack/content_type",
-+    "Deflater"         => "rack/deflater",
-+    "Directory"        => "rack/directory",
-+    "ETag"             => "rack/etag",
-+    "Events"           => "rack/events",
-+    "Files"            => "rack/files",
-+    "ForwardRequest"   => "rack/recursive",
-+    "Head"             => "rack/head",
-+    "Headers"          => "rack/headers",
-+    "Lint"             => "rack/lint",
-+    "Lock"             => "rack/lock",
-+    "MediaType"        => "rack/media_type",
-+    "MethodOverride"   => "rack/method_override",
-+    "Mime"             => "rack/mime",
-+    "MockRequest"      => "rack/mock_request",
-+    "MockResponse"     => "rack/mock_response",
-+    "Multipart"        => "rack/multipart",
-+    "NullLogger"       => "rack/null_logger",
-+    "QueryParser"      => "rack/query_parser",
-+    "Recursive"        => "rack/recursive",
-+    "Reloader"         => "rack/reloader",
-+    "Request"          => "rack/request",
-+    "Response"         => "rack/response",
-+    "RewindableInput"  => "rack/rewindable_input",
-+    "Runtime"          => "rack/runtime",
-+    "Sendfile"         => "rack/sendfile",
-+    "ShowExceptions"   => "rack/show_exceptions",
-+    "ShowStatus"       => "rack/show_status",
-+    "Static"           => "rack/static",
-+    "TempfileReaper"   => "rack/tempfile_reaper",
-+    "URLMap"           => "rack/urlmap",
-+    "Utils"            => "rack/utils",
-+
-+    # Auth sub-module constants
-+    "Auth::Basic"          => "rack/auth/basic",
-+    "Auth::AbstractHandler" => "rack/auth/abstract/handler",
-+    "Auth::AbstractRequest" => "rack/auth/abstract/request",
++  AUTOLOAD_CONSTANTS = {
++    BadRequest: 'rack/bad_request',
++    BodyProxy: 'rack/body_proxy',
++    Builder: 'rack/builder',
++    Cascade: 'rack/cascade',
++    CommonLogger: 'rack/common_logger',
++    ConditionalGet: 'rack/conditional_get',
++    Config: 'rack/config',
++    ContentLength: 'rack/content_length',
++    ContentType: 'rack/content_type',
++    Deflater: 'rack/deflater',
++    Directory: 'rack/directory',
++    ETag: 'rack/etag',
++    Events: 'rack/events',
++    Files: 'rack/files',
++    ForwardRequest: 'rack/recursive',
++    Head: 'rack/head',
++    Headers: 'rack/headers',
++    Lint: 'rack/lint',
++    Lock: 'rack/lock',
++    MediaType: 'rack/media_type',
++    MethodOverride: 'rack/method_override',
++    Mime: 'rack/mime',
++    MockRequest: 'rack/mock_request',
++    MockResponse: 'rack/mock_response',
++    Multipart: 'rack/multipart',
++    NullLogger: 'rack/null_logger',
++    QueryParser: 'rack/query_parser',
++    Recursive: 'rack/recursive',
++    Reloader: 'rack/reloader',
++    Request: 'rack/request',
++    Response: 'rack/response',
++    RewindableInput: 'rack/rewindable_input',
++    Runtime: 'rack/runtime',
++    Sendfile: 'rack/sendfile',
++    ShowExceptions: 'rack/show_exceptions',
++    ShowStatus: 'rack/show_status',
++    Static: 'rack/static',
++    TempfileReaper: 'rack/tempfile_reaper',
++    URLMap: 'rack/urlmap',
++    Utils: 'rack/utils',
 +  }.freeze
 +
-+  # ── Default: classic Module#autoload (zero-config) ────────────────
-+  autoload :BadRequest, "rack/bad_request"
-+  autoload :BodyProxy, "rack/body_proxy"
-+  autoload :Builder, "rack/builder"
-+  autoload :Cascade, "rack/cascade"
-+  autoload :CommonLogger, "rack/common_logger"
-+  autoload :ConditionalGet, "rack/conditional_get"
-+  autoload :Config, "rack/config"
-+  autoload :ContentLength, "rack/content_length"
-+  autoload :ContentType, "rack/content_type"
-+  autoload :Deflater, "rack/deflater"
-+  autoload :Directory, "rack/directory"
-+  autoload :ETag, "rack/etag"
-+  autoload :Events, "rack/events"
-+  autoload :Files, "rack/files"
-+  autoload :ForwardRequest, "rack/recursive"
-+  autoload :Head, "rack/head"
-+  autoload :Headers, "rack/headers"
-+  autoload :Lint, "rack/lint"
-+  autoload :Lock, "rack/lock"
-+  autoload :MediaType, "rack/media_type"
-+  autoload :MethodOverride, "rack/method_override"
-+  autoload :Mime, "rack/mime"
-+  autoload :MockRequest, "rack/mock_request"
-+  autoload :MockResponse, "rack/mock_response"
-+  autoload :Multipart, "rack/multipart"
-+  autoload :NullLogger, "rack/null_logger"
-+  autoload :QueryParser, "rack/query_parser"
-+  autoload :Recursive, "rack/recursive"
-+  autoload :Reloader, "rack/reloader"
-+  autoload :Request, "rack/request"
-+  autoload :Response, "rack/response"
-+  autoload :RewindableInput, "rack/rewindable_input"
-+  autoload :Runtime, "rack/runtime"
-+  autoload :Sendfile, "rack/sendfile"
-+  autoload :ShowExceptions, "rack/show_exceptions"
-+  autoload :ShowStatus, "rack/show_status"
-+  autoload :Static, "rack/static"
-+  autoload :TempfileReaper, "rack/tempfile_reaper"
-+  autoload :URLMap, "rack/urlmap"
-+  autoload :Utils, "rack/utils"
++  AUTOLOAD_CONSTANTS.each do |const, path|
++    autoload const, path
++  end
 +
 +  module Auth
-+    autoload :Basic, "rack/auth/basic"
-+    autoload :AbstractHandler, "rack/auth/abstract/handler"
-+    autoload :AbstractRequest, "rack/auth/abstract/request"
-+  end
-+
-+  # ── Custom Zeitwerk inflector ──────────────────────────────────────
-+  # Implements the Zeitwek::Inflector interface so that:
-+  #   1. We can override specific acronyms (ETag, URLMap, etc.).
-+  #   2. We do not need to repeat the mapping in two places — this
-+  #      class can optionally use CONSTANT_MAPPINGS as a validation
-+  #      source.
-+  class Inflector
-+    INFLECTIONS = {
-+      "etag"       => "ETag",
-+      "urlmap"     => "URLMap",
-+      "mime"       => "Mime",
-+      "head"       => "Head",
-+      "lint"       => "Lint",
-+      "cascade"    => "Cascade",
-+      "deflater"   => "Deflater",
-+      "sendfile"   => "Sendfile",
-+      "recursive"  => "Recursive",
-+      "reloader"   => "Reloader",
-+      "runtime"    => "Runtime",
-+      "static"     => "Static",
-+      "lock"       => "Lock",
-+      "builder"    => "Builder",
-+      "directory"  => "Directory",
-+      "events"     => "Events",
-+      "files"      => "Files",
-+      "mock"       => "Mock",
-+      "multipart"  => "Multipart",
-+      "body_proxy"                 => "BodyProxy",
-+      "common_logger"              => "CommonLogger",
-+      "conditional_get"            => "ConditionalGet",
-+      "content_length"             => "ContentLength",
-+      "content_type"               => "ContentType",
-+      "bad_request"                => "BadRequest",
-+      "method_override"            => "MethodOverride",
-+      "mock_request"               => "MockRequest",
-+      "mock_response"              => "MockResponse",
-+      "query_parser"               => "QueryParser",
-+      "rewindable_input"           => "RewindableInput",
-+      "show_exceptions"            => "ShowExceptions",
-+      "show_status"                => "ShowStatus",
-+      "tempfile_reaper"            => "TempfileReaper",
-+      "media_type"                 => "MediaType",
-+      "null_logger"                => "NullLogger",
-+      "generator"                  => "Generator",
-+      "parser"                     => "Parser",
-+      "uploaded_file"              => "UploadedFile",
-+      "handler"                    => "AbstractHandler",
-+      "request"                    => "AbstractRequest",
-+      "basic"                      => "Basic",
++    AUTH_AUTOLOAD_CONSTANTS = {
++      Basic: 'rack/auth/basic',
++      AbstractHandler: 'rack/auth/abstract/handler',
++      AbstractRequest: 'rack/auth/abstract/request',
 +    }.freeze
 +
-+    # Zeitwerk calls +camelize+ with the basename (without extension)
-+    # of each Ruby file it manages.
-+    def camelize(basename, _abspath)
-+      INFLECTIONS.fetch(basename) do
-+        basename.split("_").map(&:capitalize).join
-+      end
-+    end
-+  end
-+
-+  class << self
-+    # Holds the Zeitwerk loader once +use_zeitwerk!+ is called.
-+    attr_reader :zeitwerk_loader
-+
-+    # Whether Zeitwerk mode is active.
-+    def zeitwerk_mode?
-+      instance_variable_defined?(:@zeitwerk_loader) && !@zeitwerk_loader.nil?
-+    end
-+
-+    # Activate Zeitwerk as the autoloader.
-+    #
-+    # 1. Requires 'zeitwerk'.
-+    # 2. Removes all Module#autoload registrations under Rack so they
-+    #    do not conflict with Zeitwerk's own constant management.
-+    # 3. Pushes the load path and configures the custom inflector.
-+    #
-+    # Safe to call multiple times — subsequent calls are no-ops.
-+    def use_zeitwerk!
-+      return self if zeitwerk_mode?
-+
-+      require 'zeitwerk'
-+
-+      # Tear down legacy autoload entries to prevent double-autoload
-+      # warnings or constant redefinition issues.
-+      remove_autoloads!
-+
-+      @zeitwerk_loader = Zeitwerk::Loader.new
-+      @zeitwerk_loader.tag = "rack"
-+      @zeitwerk_loader.inflector = Rack::Inflector.new
-+      @zeitwerk_loader.push_dir(::File.expand_path(__dir__))
-+
-+      # Files already loaded explicitly should not be managed by Zeitwerk.
-+      @zeitwerk_loader.do_not_eager_load(
-+        ::File.expand_path("rack.rb", __dir__),
-+        ::File.expand_path("rack/version.rb", __dir__),
-+        ::File.expand_path("rack/constants.rb", __dir__),
-+        ::File.expand_path("rack/mock.rb", __dir__)
-+      )
-+
-+      @zeitwerk_loader.setup
-+
-+      self
-+    end
-+
-+    private
-+
-+    # Walk the current +autoload+ registrations under Rack and its
-+    # sub-modules and remove them so that Zeitwerk can take over.
-+    def remove_autoloads!
-+      # Remove direct autoloads on Rack.
-+      CONSTANT_MAPPINGS.each_key do |constant_name|
-+        # Skip namespaced constants (e.g. "Auth::Basic") — handled below.
-+        next if constant_name.include?("::")
-+
-+        # autoload? returns the path if registered, nil otherwise.
-+        # We use remove_const to fully delete the autoload trigger.
-+        Rack.send(:remove_const, constant_name) if Rack.autoload?(constant_name)
-+      end
-+
-+      # Handle Auth sub-module constants.
-+      %w[Basic AbstractHandler AbstractRequest].each do |name|
-+        if Rack::Auth.autoload?(name)
-+          Rack::Auth.send(:remove_const, name)
-+        end
-+      end
-+    end
-+  end
-+
-+  # ── Loader-agnostic eager-loading helper ───────────────────────────
-+  def self.eager_load!
-+    if zeitwerk_mode?
-+      @zeitwerk_loader.eager_load
-+    else
-+      constants(false).each { |c| const_get(c) }
-+      Auth.constants(false).each { |c| Auth.const_get(c) }
++    AUTH_AUTOLOAD_CONSTANTS.each do |const, path|
++      autoload const, path
 +    end
 +  end
 +end
