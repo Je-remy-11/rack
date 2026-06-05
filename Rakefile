@@ -126,7 +126,34 @@ task test: %w[spec test:regular test:separate]
 desc "Run all the tests we run on CI"
 task ci: :test
 
-task gem: :spec do
+desc "Verify that every autoload declaration resolves to an existing file"
+task "check:autoload" do
+  autoload_pattern = /autoload\s+:(\w+)\s*,\s*["']([^"']+)["']/
+  lib_dir = File.join(__dir__, "lib")
+  errors = []
+
+  Dir.glob(File.join(lib_dir, "**/*.rb")).each do |file|
+    File.readlines(file, encoding: "UTF-8").each_with_index do |line, idx|
+      line.scan(autoload_pattern) do |const_name, require_path|
+        resolved = File.join(lib_dir, "#{require_path}.rb")
+        unless File.exist?(resolved)
+          rel = file.delete_prefix("#{__dir__}/")
+          errors << "#{rel}:#{idx + 1}: autoload :#{const_name} => \"#{require_path}\" — file not found: #{resolved}"
+        end
+      end
+    end
+  end
+
+  unless errors.empty?
+    puts "ERROR: autoload integrity check failed:"
+    errors.each { |e| puts "  #{e}" }
+    raise "Missing autoload files detected (#{errors.size} error(s))"
+  end
+
+  puts "autoload integrity check passed (all autoload targets resolve)"
+end
+
+task gem: %w[spec check:autoload] do
   sh "gem build rack.gemspec"
 end
 
