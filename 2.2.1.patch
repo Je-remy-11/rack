@@ -1,0 +1,106 @@
+diff --git a/debug_autoload.rb b/debug_autoload.rb
+new file mode 100644
+index 00000000..59908db6
+--- /dev/null
++++ b/debug_autoload.rb
+@@ -0,0 +1,100 @@
++#!/usr/bin/env ruby
++# 调试 autoload 加载失败的方法
++
++# 方法 1: 使用 TracePoint 追踪 autoload 触发
++def trace_autoload
++  trace = TracePoint.new(:class, :c_call) do |tp|
++    if tp.event == :c_call && tp.method_id == :autoload
++      puts "autoload 被调用: #{tp.defined_module}.#{tp.self}##{tp.method_id}"
++    end
++  end
++
++  trace.enable
++
++  begin
++    # 模拟调用 Rack::BadRequest
++    require_relative 'lib/rack'
++    Rack::BadRequest
++  ensure
++    trace.disable
++  end
++end
++
++# 方法 2: 包装 Kernel#require 来追踪加载
++def trace_require
++  original_require = Kernel.method(:require)
++  original_require_relative = Kernel.method(:require_relative)
++
++  Kernel.module_eval do
++    define_singleton_method(:require) do |path|
++      puts "正在加载: #{path}"
++      original_require.call(path)
++    end
++
++    define_singleton_method(:require_relative) do |path|
++      puts "正在相对加载: #{path}"
++      original_require_relative.call(path)
++    end
++  end
++
++  begin
++    require_relative 'lib/rack'
++    Rack::BadRequest
++  ensure
++    # 恢复原始方法
++    Kernel.module_eval do
++      define_singleton_method(:require, original_require)
++      define_singleton_method(:require_relative, original_require_relative)
++    end
++  end
++end
++
++# 方法 3: 检查所有 autoload 常量
++def check_autoloads
++  require_relative 'lib/rack'
++
++  puts "Rack 模块中注册的 autoload 常量:"
++  Rack.constants.each do |const|
++    path = Rack.autoload?(const)
++    puts "  #{const} => #{path}" if path
++  end
++
++  puts "\nRack::Auth 模块中注册的 autoload 常量:"
++  Rack::Auth.constants.each do |const|
++    path = Rack::Auth.autoload?(const)
++    puts "  #{const} => #{path}" if path
++  end
++end
++
++# 主程序
++puts "=== 方法 1: 使用 TracePoint 追踪 ==="
++begin
++  trace_autoload
++rescue LoadError => e
++  puts "LoadError: #{e.message}"
++  puts "Backtrace:"
++  puts e.backtrace.join("\n")
++end
++
++puts "\n=== 方法 2: 包装 require 追踪 ==="
++begin
++  trace_require
++rescue LoadError => e
++  puts "LoadError: #{e.message}"
++end
++
++puts "\n=== 方法 3: 检查 autoload 列表 ==="
++check_autoloads
++
++# 额外方法: 最简单的调试方法 - 检查 $LOAD_PATH 和 backtrace
++puts "\n=== 额外方法: 最简单的调试 ==="
++begin
++  require_relative 'lib/rack'
++  Rack::BadRequest
++rescue LoadError => e
++  puts "LoadError: #{e}"
++  puts "\n详细 backtrace 显示触发位置:"
++  puts e.backtrace[0, 5]
++  puts "\n$LOAD_PATH:"
++  puts $LOAD_PATH
++end
